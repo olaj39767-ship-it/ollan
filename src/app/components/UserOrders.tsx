@@ -654,7 +654,7 @@ const UserOrders: React.FC = () => {
                               <div className="flex items-center gap-4">
                                 <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gray-50 rounded-xl overflow-hidden flex-shrink-0">
                                   <img
-                                    src={`https://ollanbackend.vercel.app/${item.productId.image}`}
+                                    src={`https://ollanback.vercel.app/${item.productId.image}`}
                                     alt={item.productId.name}
                                     className="w-full h-full object-contain"
                                   />
@@ -743,7 +743,7 @@ const UserOrders: React.FC = () => {
                                 <div>
                                   <p className="font-medium text-gray-900 text-sm">Prescription</p>
                                   <a
-                                    href={`https://ollanbackend.vercel.app${order.prescriptionUrl}`}
+                                    href={`https://ollanback.vercel.app${order.prescriptionUrl}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="text-red-500 hover:text-red-600 text-sm font-medium inline-flex items-center gap-1 hover:underline"

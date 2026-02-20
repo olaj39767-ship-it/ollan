@@ -88,7 +88,7 @@ const ProductManagement: React.FC = () => {
   const [orderBy, setOrderBy] = useState<keyof Product>("name");
 
   // Base URL for backend
-  const API_URL = "https://ollanbackend.vercel.app/api/products";
+  const API_URL = "https://ollanback.vercel.app/api/products";
 
   // Fetch products on component mount
   useEffect(() => {

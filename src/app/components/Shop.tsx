@@ -455,7 +455,7 @@ const PharmacyApp: React.FC = () => {
       const formData = new FormData();
       formData.append("prescription", customerInfo.prescription);
       try {
-        const res = await fetch("https://ollanbackend.vercel.app/api/orders/upload-prescription", {
+        const res = await fetch("https://ollanback.vercel.app/api/orders/upload-prescription", {
           method: "POST",
           body: formData,
         });

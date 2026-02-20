@@ -82,7 +82,7 @@ const AdminSignIn: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const res = await fetch("https://ollanbackend.vercel.app/api/auth/signin", {
+      const res = await fetch("https://ollanback.vercel.app/api/auth/signin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

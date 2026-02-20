@@ -166,7 +166,7 @@ const handleUpload = async () => {
       formDataToSend.append('files', uploadedFile.file);
     });
 
-    const response = await axios.post('https://ollanbackend.vercel.app/api/orders/send-prescription', formDataToSend, {
+    const response = await axios.post('https://ollanback.vercel.app/api/orders/send-prescription', formDataToSend, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
 

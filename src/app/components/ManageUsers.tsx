@@ -22,7 +22,7 @@ const ManageUsers: React.FC = () => {
     const fetchUsers = async () => {
       setIsLoading(true);
       try {
-        const res = await fetch("https://ollanbackend.vercel.app/api/users", {
+        const res = await fetch("https://ollanback.vercel.app/api/users", {
           method: "GET",
           headers: { "Content-Type": "application/json" },
         });
@@ -44,7 +44,7 @@ const ManageUsers: React.FC = () => {
   const handleRoleChange = async (userId: string, role: "customer" | "admin") => {
     setIsLoading(true);
     try {
-      const res = await fetch("https://ollanbackend.vercel.app/api/user/role", {
+      const res = await fetch("https://ollanback.vercel.app/api/user/role", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId, role }),

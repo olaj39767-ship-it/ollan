@@ -116,7 +116,7 @@ useEffect(() => {
 
     try {
       const token = localStorage.getItem("token");
-      const baseURL = process.env.NEXT_PUBLIC_API_URL || "https://ollanbackend.vercel.app";
+      const baseURL = process.env.NEXT_PUBLIC_API_URL || "https://ollanback.vercel.app";
 
       const response = await fetch(`${baseURL}/api/products/create`, {
         method: "POST",

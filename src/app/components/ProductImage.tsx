@@ -16,7 +16,7 @@ export default function ProductImage({
   className?: string;
 }) {
   const imageUrl = src.startsWith('/uploads') 
-    ? `https://ollanbackend.vercel.app${src}`
+    ? `https://ollanback.vercel.app${src}`
     : src;
 
   const handleError = (e: SyntheticEvent<HTMLImageElement, Event>) => {
