@@ -1,0 +1,24 @@
+# *
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /api/
+Disallow: /private/
+Disallow: /_next/
+Disallow: /checkout/
+Disallow: /account/
+Disallow: /user/
+Disallow: /payment/
+
+# Googlebot
+User-agent: Googlebot
+Allow: /
+Disallow: /admin/
+Disallow: /api/
+Disallow: /private/
+
+# Host
+Host: https://www.ollanpharmacy.ng
+
+# Sitemaps
+Sitemap: https://www.ollanpharmacy.ng/sitemap.xml
