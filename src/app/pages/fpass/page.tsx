@@ -68,7 +68,7 @@ export default function ForgotPassword() {
 
       if (!res.ok) return showMsg("error", data.message || "Something went wrong.");
       showMsg("success", "Password reset successful! Redirecting to login…");
-      setTimeout(() => { window.location.href = "/pages/login"; }, 2000);
+      setTimeout(() => { window.location.href = "/pages/si"; }, 2000);
     } catch {
       showMsg("error", "Unable to connect. Check your connection and try again.");
     }
@@ -165,7 +165,7 @@ export default function ForgotPassword() {
             <Alert status={status} message={message} />
 
             <a
-              href="/pages/login"
+              href="/pages/signin"
               className="mt-7 flex items-center justify-center gap-1.5 text-xs text-[#6b6878] transition-colors hover:text-[#f0ede8]"
             >
               <ArrowLeftIcon className="h-3.5 w-3.5" /> Back to login

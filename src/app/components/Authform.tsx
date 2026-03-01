@@ -437,7 +437,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
             {type === "signin" && (
               <div className="space-y-2">
                 <button
-                  onClick={() => router.push("/pages/forgot-password")}
+                  onClick={() => router.push("/pages/fpass")}
                   className="text-red-600 hover:text-red-800 text-sm font-medium transition-colors"
                 >
                   Forgot your password?
