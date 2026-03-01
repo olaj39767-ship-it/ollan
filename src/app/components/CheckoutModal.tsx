@@ -493,11 +493,11 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     <Store size={18} className="text-green-600" />
                     <p className="text-sm text-gray-700">
                       You can pick up your order at:<br />
-                      <span className="font-semibold">Store (1 Fadare Close, Iwo Road)</span>
+                      <span className="font-semibold">Indy Hall, University of Ibadan</span>
                     </p>
                   </div>
                   <p className="text-xs text-gray-500 mt-2">
-                    Pickup available during business hours (9AM - 6PM, Monday - Saturday)
+                    Pickup available during business hours (*AM - 10PM, Monday - Sunday)
                   </p>
                 </div>
               )}
