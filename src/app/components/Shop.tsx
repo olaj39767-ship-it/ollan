@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useReducer, useCallback, useMemo } from "react";
-import { ShoppingCart, Plus, Minus, X, Search, Home, ShoppingBag, Star, Truck, Shield, Clock, FileText } from "lucide-react";
+import { ShoppingCart, Plus, Minus, X, Search, Home, ShoppingBag, Star, Truck, Shield, Clock, FileText, Loader2 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import logo from "../../../public/ollogo.svg";
@@ -201,6 +201,12 @@ const PharmacyApp: React.FC = () => {
   const [categories, setCategories] = useState<string[]>(["All Products"]);
   const [isUnauthenticatedModalOpen, setIsUnauthenticatedModalOpen] = useState<boolean>(false);
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
+  
+  // Loading states for buttons
+  const [isAddingToCart, setIsAddingToCart] = useState<boolean>(false);
+  const [isRemovingFromCart, setIsRemovingFromCart] = useState<string | null>(null);
+  const [isUpdatingQuantity, setIsUpdatingQuantity] = useState<string | null>(null);
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState<boolean>(false);
   
   // State for prescription upload modal
   const [isPrescriptionModalOpen, setIsPrescriptionModalOpen] = useState<boolean>(false);
@@ -402,37 +408,78 @@ const PharmacyApp: React.FC = () => {
   const grandTotal = cartTotal + deliveryFee;
 
   const handleAddToCart = async () => {
-    if (selectedProduct && quantity > 0) {
-      try {
-        const bundleInfo = getProductBundleInfo(selectedProduct.name, quantity, selectedProduct.price);
-        
-        const { data } = await api.post("/api/cart/add", {
-          productId: selectedProduct._id,
+    if (!selectedProduct || quantity <= 0 || isAddingToCart) return;
+    
+    setIsAddingToCart(true);
+    
+    try {
+      const bundleInfo = getProductBundleInfo(selectedProduct.name, quantity, selectedProduct.price);
+      
+      const { data } = await api.post("/api/cart/add", {
+        productId: selectedProduct._id,
+        quantity,
+        bundleApplied: bundleInfo.hasBundle,
+        originalPrice: bundleInfo.originalPrice,
+        finalPrice: bundleInfo.finalPrice,
+        discount: bundleInfo.savedAmount
+      });
+      
+      cartDispatch({
+        type: "ADD_ITEM",
+        payload: { 
+          productId: selectedProduct, 
           quantity,
           bundleApplied: bundleInfo.hasBundle,
           originalPrice: bundleInfo.originalPrice,
           finalPrice: bundleInfo.finalPrice,
           discount: bundleInfo.savedAmount
-        });
-        
-        cartDispatch({
-          type: "ADD_ITEM",
-          payload: { 
-            productId: selectedProduct, 
-            quantity,
-            bundleApplied: bundleInfo.hasBundle,
-            originalPrice: bundleInfo.originalPrice,
-            finalPrice: bundleInfo.finalPrice,
-            discount: bundleInfo.savedAmount
-          },
-        });
-        
-        setIsQuantityModalOpen(false);
-        setSelectedProduct(null);
-        setQuantity(1);
-      } catch (error: any) {
-        alert("Error: " + (error.message || "Failed to add to cart"));
-      }
+        },
+      });
+      
+      setIsQuantityModalOpen(false);
+      setSelectedProduct(null);
+      setQuantity(1);
+    } catch (error: any) {
+      alert("Error: " + (error.message || "Failed to add to cart"));
+    } finally {
+      setIsAddingToCart(false);
+    }
+  };
+
+  const handleRemoveFromCart = async (productId: string) => {
+    if (isRemovingFromCart === productId) return;
+    
+    setIsRemovingFromCart(productId);
+    
+    try {
+      const { data } = await api.delete(`/api/cart/remove/${productId}`);
+      cartDispatch({ type: "REMOVE_ITEM", payload: productId });
+    } catch (error: any) {
+      alert("Error: " + (error.message || "Failed to remove item"));
+    } finally {
+      setIsRemovingFromCart(null);
+    }
+  };
+
+  const handleUpdateQuantity = async (productId: string, newQuantity: number) => {
+    if (isUpdatingQuantity === productId) return;
+    
+    setIsUpdatingQuantity(productId);
+    
+    try {
+      // Optimistic update
+      cartDispatch({
+        type: "UPDATE_QUANTITY",
+        payload: { id: productId, quantity: newQuantity },
+      });
+      
+      // API call would go here if needed
+      // await api.put(`/api/cart/update/${productId}`, { quantity: newQuantity });
+      
+    } catch (error: any) {
+      alert("Error: " + (error.message || "Failed to update quantity"));
+    } finally {
+      setIsUpdatingQuantity(null);
     }
   };
 
@@ -444,10 +491,10 @@ const PharmacyApp: React.FC = () => {
 
     if (!customerInfo.deliveryOption || !customerInfo.phone || (!customerInfo.deliveryAddress && customerInfo.deliveryOption !== "pickup") || (customerInfo.deliveryOption === "timeframe" && !customerInfo.timeSlot) || !customerInfo.transactionNumber) {
       alert("Please complete all required checkout fields.");
-      setIsProcessing(false);
       return;
     }
 
+    setIsSubmittingOrder(true);
     setIsProcessing(true);
 
     let prescriptionUrl = "";
@@ -467,8 +514,8 @@ const PharmacyApp: React.FC = () => {
       } catch (error: any) {
         console.error("Prescription upload error:", error);
         alert("Error uploading prescription: " + (error.message || "Unknown error"));
+        setIsSubmittingOrder(false);
         setIsProcessing(false);
-        setIsCheckoutOpen(false);
         return;
       }
     }
@@ -499,7 +546,6 @@ const PharmacyApp: React.FC = () => {
     try {
       const { data } = await api.post("/api/orders/create", payload);
       console.log("Order created successfully:", data);
-      setIsProcessing(false);
       setOrderComplete(true);
       cartDispatch({ type: "CLEAR_CART" });
       setIsCheckoutOpen(false);
@@ -519,8 +565,9 @@ const PharmacyApp: React.FC = () => {
     } catch (error: any) {
       console.error("Create order error:", error);
       alert("Error creating order: " + (error.message || "Unknown error"));
+    } finally {
+      setIsSubmittingOrder(false);
       setIsProcessing(false);
-      setIsCheckoutOpen(false);
     }
   };
 
@@ -586,6 +633,7 @@ const PharmacyApp: React.FC = () => {
               }}
               className="rounded-full p-2 hover:bg-gray-100 transition-colors duration-200"
               aria-label="Close modal"
+              disabled={isAddingToCart}
             >
               <X size={24} className="text-red-500" />
             </button>
@@ -617,8 +665,9 @@ const PharmacyApp: React.FC = () => {
             <div className="flex items-center justify-between bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-4">
               <button
                 onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                className="rounded-full border-2 border-red-500 p-3 text-red-500 hover:bg-red-500 hover:text-white transition-all duration-200 active:scale-95"
+                className="rounded-full border-2 border-red-500 p-3 text-red-500 hover:bg-red-500 hover:text-white transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                 aria-label="Decrease quantity"
+                disabled={isAddingToCart || quantity <= 1}
               >
                 <Minus size={20} />
               </button>
@@ -628,8 +677,9 @@ const PharmacyApp: React.FC = () => {
               </div>
               <button
                 onClick={() => setQuantity(quantity + 1)}
-                className="rounded-full bg-gradient-to-r from-red-500 to-orange-500 p-3 text-white hover:from-red-600 hover:to-orange-600 transition-all duration-200 active:scale-95 shadow-lg shadow-red-500/25"
+                className="rounded-full bg-gradient-to-r from-red-500 to-orange-500 p-3 text-white hover:from-red-600 hover:to-orange-600 transition-all duration-200 active:scale-95 shadow-lg shadow-red-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
                 aria-label="Increase quantity"
+                disabled={isAddingToCart}
               >
                 <Plus size={20} />
               </button>
@@ -687,18 +737,26 @@ const PharmacyApp: React.FC = () => {
           </div>
           <button
             onClick={handleAddToCart}
-            className="w-full bg-gradient-to-r from-red-500 to-orange-500 py-4 rounded-xl font-bold text-white hover:from-red-600 hover:to-orange-600 active:scale-[0.98] transition-all duration-200 shadow-lg shadow-red-500/25"
+            disabled={isAddingToCart}
+            className="w-full bg-gradient-to-r from-red-500 to-orange-500 py-4 rounded-xl font-bold text-white hover:from-red-600 hover:to-orange-600 active:scale-[0.98] transition-all duration-200 shadow-lg shadow-red-500/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             aria-label={`Add ${selectedProduct.name} to cart`}
           >
-            {bundleInfo.hasBundle ? (
+            {isAddingToCart ? (
               <>
-                Add to Cart • <span className="line-through text-white/70 mr-1">
-                  ₦{bundleInfo.originalPrice.toLocaleString()}
-                </span>
-                ₦{bundleInfo.finalPrice.toLocaleString()}
+                <Loader2 size={20} className="animate-spin" />
+                Adding to Cart...
               </>
             ) : (
-              `Add to Cart • ₦${(selectedProduct.price * quantity).toLocaleString()}`
+              bundleInfo.hasBundle ? (
+                <>
+                  Add to Cart • <span className="line-through text-white/70 mr-1">
+                    ₦{bundleInfo.originalPrice.toLocaleString()}
+                  </span>
+                  ₦{bundleInfo.finalPrice.toLocaleString()}
+                </>
+              ) : (
+                `Add to Cart • ₦${(selectedProduct.price * quantity).toLocaleString()}`
+              )
             )}
           </button>
         </div>
@@ -729,15 +787,6 @@ const PharmacyApp: React.FC = () => {
 
     if (!isCartOpen) return null;
 
-    const removeFromCart = async (productId: string) => {
-      try {
-        const { data } = await api.delete(`/api/cart/remove/${productId}`);
-        cartDispatch({ type: "REMOVE_ITEM", payload: productId });
-      } catch (error: any) {
-        alert("Error: " + (error.message || "Failed to remove item"));
-      }
-    };
-
     return (
       <div className="fixed inset-0 bg-black/50 z-50 flex">
         <div className="ml-auto">
@@ -758,6 +807,7 @@ const PharmacyApp: React.FC = () => {
                 <button
                   onClick={() => setIsCartOpen(false)}
                   className="p-3 hover:bg-gray-100 rounded-full active:scale-95 transition-all duration-200"
+                  aria-label="Close cart"
                 >
                   <X size={24} className="text-gray-500" />
                 </button>
@@ -786,9 +836,16 @@ const PharmacyApp: React.FC = () => {
                       .map((item) => {
                         const bundleInfo = getProductBundleInfo(item.productId.name, item.quantity, item.productId.price);
                         const displayPrice = bundleInfo.finalPrice;
+                        const isRemoving = isRemovingFromCart === item.productId._id;
+                        const isUpdating = isUpdatingQuantity === item.productId._id;
                         
                         return (
-                          <div key={item.productId._id} className="bg-gradient-to-r from-gray-50 to-white rounded-2xl p-4 border border-gray-100 hover:shadow-md transition-all duration-200">
+                          <div key={item.productId._id} className="bg-gradient-to-r from-gray-50 to-white rounded-2xl p-4 border border-gray-100 hover:shadow-md transition-all duration-200 relative">
+                            {isRemoving && (
+                              <div className="absolute inset-0 bg-white/80 rounded-2xl flex items-center justify-center z-10">
+                                <Loader2 size={24} className="animate-spin text-red-500" />
+                              </div>
+                            )}
                             <div className="flex items-center gap-4">
                               <div className="h-20 w-20 rounded-xl bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center p-2">
                                 <img
@@ -830,34 +887,37 @@ const PharmacyApp: React.FC = () => {
                                 <div className="flex items-center justify-between mt-3">
                                   <div className="flex items-center gap-3 bg-gradient-to-r from-gray-100 to-gray-200 rounded-full px-4 py-2">
                                     <button
-                                      onClick={() =>
-                                        cartDispatch({
-                                          type: "UPDATE_QUANTITY",
-                                          payload: { id: item.productId._id, quantity: item.quantity - 1 },
-                                        })
-                                      }
-                                      className="p-1 hover:bg-white rounded-full active:scale-95 transition-all duration-200"
+                                      onClick={() => handleUpdateQuantity(item.productId._id, item.quantity - 1)}
+                                      disabled={isUpdating || isRemoving || item.quantity <= 1}
+                                      className="p-1 hover:bg-white rounded-full active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                       <Minus size={16} />
                                     </button>
-                                    <span className="font-bold text-gray-900 min-w-[24px] text-center">{item.quantity}</span>
+                                    <span className="font-bold text-gray-900 min-w-[24px] text-center">
+                                      {isUpdating ? (
+                                        <Loader2 size={16} className="animate-spin mx-auto" />
+                                      ) : (
+                                        item.quantity
+                                      )}
+                                    </span>
                                     <button
-                                      onClick={() =>
-                                        cartDispatch({
-                                          type: "UPDATE_QUANTITY",
-                                          payload: { id: item.productId._id, quantity: item.quantity + 1 },
-                                        })
-                                      }
-                                      className="p-1 hover:bg-white rounded-full active:scale-95 transition-all duration-200"
+                                      onClick={() => handleUpdateQuantity(item.productId._id, item.quantity + 1)}
+                                      disabled={isUpdating || isRemoving}
+                                      className="p-1 hover:bg-white rounded-full active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                       <Plus size={16} />
                                     </button>
                                   </div>
                                   <button
-                                    onClick={() => removeFromCart(item.productId._id)}
-                                    className="p-2 hover:bg-red-50 text-red-500 rounded-xl active:scale-95 transition-all duration-200"
+                                    onClick={() => handleRemoveFromCart(item.productId._id)}
+                                    disabled={isRemoving || isUpdating}
+                                    className="p-2 hover:bg-red-50 text-red-500 rounded-xl active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                                   >
-                                    <X size={20} />
+                                    {isRemoving ? (
+                                      <Loader2 size={20} className="animate-spin" />
+                                    ) : (
+                                      <X size={20} />
+                                    )}
                                   </button>
                                 </div>
                               </div>
@@ -897,9 +957,17 @@ const PharmacyApp: React.FC = () => {
                       setIsCartOpen(false);
                       setIsCheckoutOpen(true);
                     }}
-                    className="w-full bg-gradient-to-r from-red-500 to-orange-500 text-white py-4 rounded-xl font-bold hover:from-red-600 hover:to-orange-600 active:scale-[0.98] transition-all duration-200 shadow-lg shadow-red-500/25"
+                    disabled={isSubmittingOrder || cart.length === 0}
+                    className="w-full bg-gradient-to-r from-red-500 to-orange-500 text-white py-4 rounded-xl font-bold hover:from-red-600 hover:to-orange-600 active:scale-[0.98] transition-all duration-200 shadow-lg shadow-red-500/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
-                    Proceed to Checkout
+                    {isSubmittingOrder ? (
+                      <>
+                        <Loader2 size={20} className="animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      "Proceed to Checkout"
+                    )}
                   </button>
                 </>
               )}
@@ -976,11 +1044,12 @@ const PharmacyApp: React.FC = () => {
                   setSelectedCategory("All Products");
                 }}
                 aria-label="Switch to Supermarket view"
+                disabled={isSubmittingOrder}
               >
                 <span className="flex text-sm lg:text-base items-center gap-2">
                   <ShoppingBag size={18} />
                   <span className="hidden lg:inline">Supermarket</span>
-                  <span className="lg:hidden">Market</span>
+                  <span className="lg:hidden text-[8px]">Market</span>
                 </span>
               </button>
               <button
@@ -994,13 +1063,14 @@ const PharmacyApp: React.FC = () => {
                   setSelectedCategory("All Category");
                 }}
                 aria-label="Switch to Pharmacy view"
+                disabled={isSubmittingOrder}
               >
                 <span className="flex text-sm lg:text-base items-center gap-2">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
                   </svg>
                   <span className="hidden lg:inline">Pharmacy</span>
-                  <span className="lg:hidden">Pharm</span>
+                  <span className="lg:hidden text-[8px]">Pharm</span>
                 </span>
               </button>
             </div>
@@ -1019,16 +1089,18 @@ const PharmacyApp: React.FC = () => {
                   }}
                   className="relative group"
                   aria-label="Upload prescription"
+                  disabled={isSubmittingOrder}
                 >
-                 
+                  {/* Button content here */}
                 </button>
               )}
               
               {/* Cart Button */}
               <button
                 onClick={() => setIsCartOpen(true)}
-                className="relative p-4 bg-gradient-to-r from-red-500 to-orange-500 text-white rounded-xl hover:from-red-600 hover:to-orange-600 active:scale-95 transition-all duration-300 shadow-lg hover:shadow-xl hover:shadow-red-500/30 group"
+                className="relative p-4 bg-gradient-to-r from-red-500 to-orange-500 text-white rounded-xl hover:from-red-600 hover:to-orange-600 active:scale-95 transition-all duration-300 shadow-lg hover:shadow-xl hover:shadow-red-500/30 group disabled:opacity-50 disabled:cursor-not-allowed"
                 aria-label="Open cart"
+                disabled={isSubmittingOrder}
               >
                 <div className="relative">
                   <ShoppingCart size={24} />
@@ -1068,6 +1140,7 @@ const PharmacyApp: React.FC = () => {
               <button
                 onClick={() => setIsPrescriptionModalOpen(true)}
                 className="text-sm text-red-500 hover:text-red-600 font-semibold flex items-center gap-1 my-5"
+                disabled={isSubmittingOrder}
               >
                 <FileText size={16} />
                 Upload Prescription
@@ -1083,6 +1156,7 @@ const PharmacyApp: React.FC = () => {
                       ? "bg-gradient-to-r from-red-500 to-orange-500 text-white shadow-md"
                       : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                   }`}
+                  disabled={isSubmittingOrder}
                 >
                   {category}
                 </button>
@@ -1176,16 +1250,27 @@ const PharmacyApp: React.FC = () => {
                     {/* Button always at bottom */}
                     <button
                       onClick={() => openQuantityModal(product)}
-                      disabled={product.stock === 0}
+                      disabled={product.stock === 0 || isAddingToCart || isSubmittingOrder}
                       className={`mx-2 mb-2 py-2.5 rounded-lg font-semibold text-sm 
-                                  transition-all duration-300 active:scale-95 ${
+                                  transition-all duration-300 active:scale-95 flex items-center justify-center gap-2 ${
                         product.stock > 0
                           ? "bg-gradient-to-r from-red-500 to-orange-500 text-white hover:from-red-600 hover:to-orange-600"
                           : "bg-gray-200 text-gray-500 cursor-not-allowed"
-                      }`}
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
                       aria-label={product.stock > 0 ? `Add ${product.name} to cart` : `${product.name} is out of stock`}
                     >
-                      {product.stock > 0 ? "Add to Cart" : "Out of Stock"}
+                      {product.stock > 0 ? (
+                        isAddingToCart && selectedProduct?._id === product._id ? (
+                          <>
+                            <Loader2 size={16} className="animate-spin" />
+                            Adding...
+                          </>
+                        ) : (
+                          "Add to Cart"
+                        )
+                      ) : (
+                        "Out of Stock"
+                      )}
                     </button>
                   </div>
                 );
@@ -1217,6 +1302,7 @@ const PharmacyApp: React.FC = () => {
         isProcessing={isProcessing}
         submitOrder={submitOrder}
         cart={cart}
+        isSubmittingOrder={isSubmittingOrder} // Pass this prop to CheckoutModal
       />
       <OrderCompleteModal />
       <UnauthenticatedModal />

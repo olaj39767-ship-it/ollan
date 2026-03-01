@@ -126,7 +126,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
 
     try {
       if (type === "signup") {
-        const res = await fetch("https://ollanbackend-jr1d3g.fly.dev/api/auth/signup", {
+        const res = await fetch("http://localhost:5000/api/auth/signup", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -437,7 +437,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
             {type === "signin" && (
               <div className="space-y-2">
                 <button
-                  onClick={() => router.push("/forgot-password")}
+                  onClick={() => router.push("/pages/forgot-password")}
                   className="text-red-600 hover:text-red-800 text-sm font-medium transition-colors"
                 >
                   Forgot your password?

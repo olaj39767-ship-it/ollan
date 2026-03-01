@@ -8,6 +8,7 @@ import { AuthProvider } from "../context/AuthContext";
 import Script from "next/script";
 import ClientLayout from "./components/ClientLayout";
 
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -141,7 +142,11 @@ export default function RootLayout({
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>
         <AuthProvider>
-          <ClientLayout>{children}</ClientLayout>
+       
+ <ClientLayout>
+  {children}
+  </ClientLayout>
+         
         </AuthProvider>
       </body>
     </html>

@@ -1,9 +1,7 @@
-
-
 "use client";
 
 import React, { useRef, useEffect, useState } from "react";
-import { X, User, Phone, Home, CreditCard } from "lucide-react";
+import { X, User, Phone, Home, CreditCard, ChevronRight, ChevronLeft, ShoppingBag, MapPin, Clock } from "lucide-react";
 
 export interface CustomerInfo {
   name: string;
@@ -13,7 +11,7 @@ export interface CustomerInfo {
   deliveryOption: "express" | "timeframe" | "pickup" | "" | "nil";
   pickupLocation: string;
   deliveryAddress: string;
-  timeSlot: "12 PM" | "4 PM" | "9 PM" | "6 AM" | "" | "nil";
+  timeSlot?: "12 PM" | "4 PM" | "9 PM" | "6 AM" | "" | "nil"; // Made optional
   isUIAddress: boolean;
   transactionNumber: string;
   discountCode?: string;
@@ -29,6 +27,7 @@ interface CheckoutModalProps {
   grandTotal: number;
   estimatedDelivery: string;
   isProcessing: boolean;
+  isSubmittingOrder?: boolean;
   submitOrder: (customerInfo: CustomerInfo) => void;
   cart: { productId: { _id: string; price: number; category?: string }; quantity: number }[];
 }
@@ -43,17 +42,19 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   grandTotal,
   estimatedDelivery,
   isProcessing,
+  isSubmittingOrder = false,
   submitOrder,
   cart,
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const customAddressInputRef = useRef<HTMLInputElement>(null);
+  const [currentStep, setCurrentStep] = useState<1 | 2>(1);
   const [addressError, setAddressError] = useState<string>("");
   const [discountError, setDiscountError] = useState<string>("");
   const [appliedDiscount, setAppliedDiscount] = useState<number>(0);
   const [showCustomAddress, setShowCustomAddress] = useState<boolean>(false);
 
-  const deliveryAreas = ["UCH", "Bodija", "Orogun", "Basorun", "University of Ibadan", "Other"];
+  const deliveryAreas = ["University of Ibadan", "Agbowo Area"];
   const uiPickupLocations = [
     "School Gate",
     "Tedder",
@@ -70,42 +71,23 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     "Saint Annes",
   ];
   const uchPickupLocations = ["ABH", "First Gate", "Second Gate", "UCH School"];
-  const storeLocation = "Store (1 Fadare Close, Iwo Road)";
+  const storeLocation = "Inependence Hall, University of ibadan"; // Store pickup location for non-UI/UCH deliveries
 
   // Promo codes for 10% discount on supermarket items
- const discountPromoCodes = ["OllAN10", "MUIZAT10", "ABDUL10", "OYIN10", "WEST10", "BLESS10", "EMMA10"];   ;
+  const discountPromoCodes = ["OllAN10", "MUIZAT10", "ABDUL10", "OYIN10", "WEST10", "BLESS10", "EMMA10"];
   // Promo codes for free delivery
   const freeDeliveryPromoCodes = ["WASIU10", "DELIVERFREE"];
   const supermarketCategories = ["Baby Care", "Groceries", "Beverages", "Household"];
   const validPromoAreas = ["University of Ibadan", "UCH"];
 
-  const getNextDeliverySlot = (): "12 PM" | "4 PM" | "9 PM" | "6 AM" => {
-    const now = new Date();
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
-    const currentTimeInMinutes = hours * 60 + minutes;
-
-    const slots = [
-      { time: "12 PM", minutes: 12 * 60 },
-      { time: "4 PM", minutes: 16 * 60 },
-      { time: "9 PM", minutes: 21 * 60 },
-      { time: "6 AM", minutes: 6 * 60 },
-    ];
-
-    for (const slot of slots) {
-      if (currentTimeInMinutes < slot.minutes - 30) {
-        return slot.time as "12 PM" | "4 PM" | "9 PM" | "6 AM";
-      }
-    }
-    return "6 AM";
-  };
-
+  // Reset to step 1 when modal opens
   useEffect(() => {
-    if (customerInfo.deliveryOption === "timeframe" && !customerInfo.timeSlot) {
-      const nextSlot = getNextDeliverySlot();
-      setCustomerInfo({ ...customerInfo, timeSlot: nextSlot });
+    if (isOpen) {
+      setCurrentStep(1);
+      // Reset timeSlot to nil when modal opens
+      setCustomerInfo(prev => ({ ...prev, timeSlot: "nil" }));
     }
-  }, [customerInfo.deliveryOption, customerInfo.timeSlot, setCustomerInfo]);
+  }, [isOpen, setCustomerInfo]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -140,8 +122,8 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       deliveryAddress: isOtherArea ? "" : area,
       isUIAddress,
       deliveryOption: isUIAddress ? customerInfo.deliveryOption || "express" : "express",
-      pickupLocation: isUIAddress && (customerInfo.deliveryOption === "pickup" || customerInfo.deliveryOption === "timeframe") ? customerInfo.pickupLocation : isOtherArea ? "" : area,
-      timeSlot: isUIAddress && customerInfo.deliveryOption === "timeframe" ? customerInfo.timeSlot || getNextDeliverySlot() : "nil",
+      pickupLocation: isUIAddress && customerInfo.deliveryOption === "pickup" ? customerInfo.pickupLocation : isOtherArea ? "" : area,
+      timeSlot: "nil", // Always set to nil
     });
     setAddressError("");
   };
@@ -160,7 +142,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   };
 
   const handlePickupLocationChange = (location: string) => {
-    const concatenatedLocation = customerInfo.deliveryAddress && location && (customerInfo.deliveryOption === "pickup" || customerInfo.deliveryOption === "timeframe")
+    const concatenatedLocation = customerInfo.deliveryAddress && location && customerInfo.deliveryOption === "pickup"
       ? `${customerInfo.deliveryAddress} - ${location}`
       : location || customerInfo.deliveryAddress || "";
     setCustomerInfo({
@@ -216,12 +198,9 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
+  const validateStep1 = (): boolean => {
     const errors: string[] = [];
-    if (!customerInfo.name.trim()) errors.push("Full Name is required");
-    if (!customerInfo.email.trim()) errors.push("Email is required");
+    
     if (!customerInfo.phone.trim()) errors.push("Phone Number is required");
     if (!customerInfo.deliveryOption || customerInfo.deliveryOption === "nil") {
       errors.push("Delivery Option is required");
@@ -235,12 +214,34 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     if (customerInfo.deliveryOption === "pickup" && (!customerInfo.pickupLocation || customerInfo.pickupLocation === "nil")) {
       errors.push("Pickup Location is required for pickup option");
     }
-    if (customerInfo.deliveryOption === "timeframe" && (!customerInfo.timeSlot || customerInfo.timeSlot === "nil")) {
-      errors.push("Time Slot is required for timeframe delivery");
-    }
-    if ((customerInfo.deliveryOption === "pickup" || (customerInfo.isUIAddress && customerInfo.deliveryOption === "timeframe")) && customerInfo.deliveryAddress && !customerInfo.pickupLocation.includes(customerInfo.deliveryAddress)) {
+    if (customerInfo.deliveryOption === "pickup" && customerInfo.deliveryAddress && !customerInfo.pickupLocation.includes(customerInfo.deliveryAddress)) {
       errors.push("Pickup Location must include the selected Delivery Area");
     }
+
+    if (errors.length > 0) {
+      alert(`Please fix the following errors:\n${errors.join("\n")}`);
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleNextStep = () => {
+    if (validateStep1()) {
+      setCurrentStep(2);
+    }
+  };
+
+  const handlePrevStep = () => {
+    setCurrentStep(1);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const errors: string[] = [];
+    if (!customerInfo.name.trim()) errors.push("Full Name is required");
+    if (!customerInfo.email.trim()) errors.push("Email is required");
     if (!customerInfo.transactionNumber.trim()) errors.push("Bank Transaction Number is required");
 
     if (errors.length > 0) {
@@ -255,11 +256,11 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       prescription: customerInfo.prescription || null,
       deliveryOption: customerInfo.deliveryOption,
       pickupLocation:
-        customerInfo.deliveryOption === "pickup" || (customerInfo.isUIAddress && customerInfo.deliveryOption === "timeframe")
+        customerInfo.deliveryOption === "pickup"
           ? customerInfo.pickupLocation
           : customerInfo.deliveryAddress.trim(),
       deliveryAddress: customerInfo.isUIAddress ? "nil" : customerInfo.deliveryAddress.trim(),
-      timeSlot: customerInfo.deliveryOption === "timeframe" && customerInfo.isUIAddress ? customerInfo.timeSlot : "nil",
+      timeSlot: "nil",
       isUIAddress: customerInfo.isUIAddress,
       transactionNumber: customerInfo.transactionNumber.trim(),
       discountCode: customerInfo.discountCode?.trim() || "",
@@ -293,66 +294,107 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const discountedTotal = grandTotal - appliedDiscount;
 
+  // Step indicator - Mobile responsive
+  const StepIndicator = () => (
+    <div className="flex items-center justify-center mb-4 md:mb-6">
+      <div className="flex items-center w-full max-w-xs">
+        <div className={`flex items-center justify-center w-7 h-7 md:w-8 md:h-8 rounded-full text-xs md:text-sm ${
+          currentStep >= 1 ? "bg-red-500 text-white" : "bg-gray-200 text-gray-600"
+        }`}>
+          1
+        </div>
+        <div className={`flex-1 h-1 mx-1 md:mx-2 ${currentStep >= 2 ? "bg-red-500" : "bg-gray-200"}`} />
+        <div className={`flex items-center justify-center w-7 h-7 md:w-8 md:h-8 rounded-full text-xs md:text-sm ${
+          currentStep >= 2 ? "bg-red-500 text-white" : "bg-gray-200 text-gray-600"
+        }`}>
+          2
+        </div>
+      </div>
+    </div>
+  );
+
+  // Order Summary Component - Mobile responsive
+  const OrderSummary = () => (
+    <div className="bg-gradient-to-r from-red-50 to-orange-50 p-3 md:p-4 rounded-xl mb-4 md:mb-6 border border-red-100">
+      <div className="flex items-center gap-2 mb-2 md:mb-3">
+        <ShoppingBag size={18} className="text-red-500 md:w-5 md:h-5" />
+        <h3 className="font-bold text-gray-900 text-sm md:text-base">Order Summary</h3>
+      </div>
+      <div className="space-y-1.5 md:space-y-2">
+        <div className="flex justify-between text-xs md:text-sm">
+          <span className="text-gray-600">Subtotal:</span>
+          <span className="font-medium">₦{cartTotal.toLocaleString()}</span>
+        </div>
+        <div className="flex justify-between text-xs md:text-sm">
+          <span className="text-gray-600">Delivery Fee:</span>
+          <span className="font-medium">
+            {customerInfo.deliveryOption && customerInfo.discountCode && freeDeliveryPromoCodes.map(c => c.toLowerCase()).includes(customerInfo.discountCode.toLowerCase())
+              ? "Free"
+              : customerInfo.deliveryOption && customerInfo.deliveryOption !== "nil"
+              ? customerInfo.deliveryOption === "express"
+                ? "₦500"
+                : customerInfo.deliveryOption === "pickup"
+                ? "Free"
+                : cartTotal >= 5000
+                ? "Free"
+                : "₦500"
+              : "N/A"}
+          </span>
+        </div>
+        {appliedDiscount > 0 && (
+          <div className="flex justify-between text-xs md:text-sm text-green-600">
+            <span>Discount:</span>
+            <span>-₦{appliedDiscount.toLocaleString()}</span>
+          </div>
+        )}
+        <div className="border-t border-red-200 pt-1.5 md:pt-2 mt-1.5 md:mt-2">
+          <div className="flex justify-between font-bold text-red-600 text-sm md:text-base">
+            <span>Total:</span>
+            <span>₦{discountedTotal.toLocaleString()}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
       <div
         ref={modalRef}
-        className="bg-white rounded-2xl w-full max-w-4xl max-h-[95vh] overflow-y-auto shadow-2xl transform transition-all"
+        className="bg-white rounded-xl md:rounded-2xl w-full max-w-4xl max-h-[98vh] md:max-h-[95vh] overflow-y-auto shadow-2xl transform transition-all"
       >
-        <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-red-50 to-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">Complete Your Order</h2>
-              <p className="text-sm text-gray-600 mt-1">Fill in your details and transaction number to submit your order</p>
+        {/* Header - Sticky with mobile optimizations */}
+        <div className="sticky top-0 z-10 bg-gradient-to-r from-red-50 to-white border-b border-gray-200 p-4 md:p-6">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1">
+              <h2 className="text-lg md:text-2xl font-bold text-gray-900">Complete Your Order</h2>
+              <p className="text-xs md:text-sm text-gray-600 mt-0.5 md:mt-1">
+                Step {currentStep} of 2: {currentStep === 1 ? "Delivery Details" : "Payment & Confirmation"}
+              </p>
             </div>
             <button
               onClick={() => setIsOpen(false)}
-              className="p-2 hover:bg-gray-100 rounded-full active:scale-95 transition-transform"
+              className="p-1.5 md:p-2 hover:bg-gray-100 rounded-full active:scale-95 transition-transform flex-shrink-0"
               aria-label="Close checkout modal"
+              disabled={isProcessing || isSubmittingOrder}
             >
-              <X size={24} className="text-gray-500" />
+              <X size={20} className="text-gray-500 md:w-6 md:h-6" />
             </button>
           </div>
+          <StepIndicator />
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 md:p-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-5">
-              <div className="bg-gray-50 p-4 rounded-xl">
-                <label className="block text-sm font-medium mb-2 text-gray-700 flex items-center">
-                  <User size={18} className="mr-2 text-red-500" />
-                  Full Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={customerInfo.name}
-                  onChange={(e) => setCustomerInfo({ ...customerInfo, name: e.target.value })}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white"
-                  placeholder="Enter your full name"
-                  aria-label="Full name"
-                />
-              </div>
+        <form onSubmit={handleSubmit} className="p-4 md:p-8">
+          {/* Order Summary at the top of both steps */}
+          <OrderSummary />
 
-              <div className="bg-gray-50 p-4 rounded-xl">
-                <label className="block text-sm font-medium mb-2 text-gray-700 flex items-center">
-                  <User size={18} className="mr-2 text-red-500" />
-                  Email *
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={customerInfo.email}
-                  onChange={(e) => setCustomerInfo({ ...customerInfo, email: e.target.value })}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white"
-                  placeholder="Enter your email address"
-                  aria-label="Email address"
-                />
-              </div>
-
-              <div className="bg-gray-50 p-4 rounded-xl">
-                <label className="block text-sm font-medium mb-2 text-gray-700 flex items-center">
-                  <Phone size={18} className="mr-2 text-red-500" />
+          {currentStep === 1 ? (
+            /* Step 1: Delivery Details - Mobile optimized */
+            <div className="space-y-4 md:space-y-5">
+              {/* Phone Number */}
+              <div className="bg-gray-50 p-3 md:p-4 rounded-lg md:rounded-xl">
+                <label className="block text-xs md:text-sm font-medium mb-1.5 md:mb-2 text-gray-700 flex items-center">
+                  <Phone size={16} className="mr-1.5 md:mr-2 text-red-500" />
                   Phone Number *
                 </label>
                 <input
@@ -360,27 +402,26 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   required
                   value={customerInfo.phone}
                   onChange={(e) => setCustomerInfo({ ...customerInfo, phone: e.target.value })}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white"
+                  className="w-full p-2.5 md:p-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white"
                   placeholder="Enter your phone number"
                   aria-label="Phone number"
+                  disabled={isProcessing || isSubmittingOrder}
                 />
               </div>
 
-            
-            </div>
-
-            <div className="space-y-5">
-              <div className="bg-gray-50 p-4 rounded-xl">
-                <label className="block text-sm font-medium mb-2 text-gray-700 flex items-center">
-                  <Home size={18} className="mr-2 text-red-500" />
+              {/* Delivery Area */}
+              <div className="bg-gray-50 p-3 md:p-4 rounded-lg md:rounded-xl">
+                <label className="block text-xs md:text-sm font-medium mb-1.5 md:mb-2 text-gray-700 flex items-center">
+                  <MapPin size={16} className="mr-1.5 md:mr-2 text-red-500" />
                   Delivery Area *
                 </label>
                 <select
                   required
                   value={showCustomAddress ? "Other" : customerInfo.deliveryAddress}
                   onChange={(e) => handleDeliveryAreaChange(e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white appearance-none"
+                  className="w-full p-2.5 md:p-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white appearance-none"
                   aria-label="Delivery area"
+                  disabled={isProcessing || isSubmittingOrder}
                 >
                   <option value="" disabled>
                     Select a delivery area
@@ -392,37 +433,39 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   ))}
                 </select>
                 {showCustomAddress && (
-                  <div className="mt-3">
+                  <div className="mt-2 md:mt-3">
                     <input
                       ref={customAddressInputRef}
                       type="text"
                       required
                       value={customerInfo.deliveryAddress}
                       onChange={(e) => handleCustomAddressChange(e.target.value)}
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white"
-                      placeholder="Enter your full address (e.g., 123 Main St, Ibadan)"
+                      className="w-full p-2.5 md:p-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white"
+                      placeholder="Enter your full address"
                       aria-label="Custom delivery address"
                       onClick={(e) => e.stopPropagation()}
+                      disabled={isProcessing || isSubmittingOrder}
                     />
-                    {addressError && <p className="text-sm text-red-600 mt-2">{addressError}</p>}
+                    {addressError && <p className="text-xs text-red-600 mt-1.5">{addressError}</p>}
                   </div>
                 )}
                 {customerInfo.deliveryOption === "express" && customerInfo.deliveryAddress && !showCustomAddress && (
-                  <p className="text-sm text-gray-600 mt-2">
+                  <p className="text-xs text-gray-600 mt-2">
                     Our rider will contact you to confirm your exact location in {customerInfo.deliveryAddress}.
                   </p>
                 )}
               </div>
 
-              <div className="bg-gray-50 p-4 rounded-xl">
-                <label className="block text-sm font-medium mb-2 text-gray-700">
-                  Delivery Option * (Fee: {customerInfo.deliveryOption === "express" ? "₦500" : customerInfo.deliveryOption === "timeframe" ? (cartTotal >= 5000 || (customerInfo.discountCode && freeDeliveryPromoCodes.map(c => c.toLowerCase()).includes(customerInfo.discountCode.toLowerCase())) ? "Free" : "₦500") : customerInfo.deliveryOption === "pickup" ? "Free" : "Select an option"})
+              {/* Delivery Options */}
+              <div className="bg-gray-50 p-3 md:p-4 rounded-lg md:rounded-xl">
+                <label className="block text-xs md:text-sm font-medium mb-2 md:mb-3 text-gray-700">
+                  Delivery Option *
                 </label>
-                <div className="space-y-3">
-                  <label className="flex items-center p-3 border border-gray-300 rounded-lg hover:border-red-300 cursor-pointer">
+                <div className="space-y-2 md:space-y-3">
+                  {/* Express Delivery */}
+                  <label className="flex items-start p-2.5 md:p-3 border border-gray-300 rounded-lg hover:border-red-300 cursor-pointer">
                     <input
                       type="radio"
-                      id="express"
                       name="deliveryOption"
                       value="express"
                       checked={customerInfo.deliveryOption === "express"}
@@ -431,100 +474,77 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                           ...customerInfo,
                           deliveryOption: e.target.value as "express",
                           pickupLocation: customerInfo.deliveryAddress || "",
-                          timeSlot: "nil",
                         })
                       }
-                      className="h-4 w-4 text-red-600 focus:ring-red-500"
-                      aria-label="Express delivery"
+                      className="h-4 w-4 mt-0.5 text-red-600 focus:ring-red-500"
+                      disabled={isProcessing || isSubmittingOrder}
                     />
-                    <div className="ml-3">
-                      <span className="block text-sm font-medium text-gray-800">Express Delivery</span>
-                      <span className="block text-xs text-gray-500">Within 1 hour (₦500)</span>
+                    <div className="ml-2 md:ml-3 flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm md:text-base font-medium text-gray-800">Express Delivery</span>
+                        <span className="text-xs md:text-sm font-semibold text-red-600">₦500</span>
+                      </div>
+                      <span className="text-xs text-gray-500">Within 1 hour</span>
                     </div>
                   </label>
+
+                  {/* Pickup - Only show for UI/UCH addresses */}
                   {customerInfo.isUIAddress && (
-                    <>
-           
-                      <label className="flex items-center p-3 border border-gray-300 rounded-lg hover:border-red-300 cursor-pointer">
-                        <input
-                          type="radio"
-                          id="pickup"
-                          name="deliveryOption"
-                          value="pickup"
-                          checked={customerInfo.deliveryOption === "pickup"}
-                          onChange={(e) =>
-                            setCustomerInfo({
-                              ...customerInfo,
-                              deliveryOption: e.target.value as "pickup",
-                              timeSlot: "nil",
-                              pickupLocation: customerInfo.isUIAddress ? customerInfo.pickupLocation : customerInfo.deliveryAddress || storeLocation,
-                            })
-                          }
-                          className="h-4 w-4 text-red-600 focus:ring-red-500"
-                          aria-label="Pickup"
-                        />
-                        <div className="ml-3">
-                          <span className="block text-sm font-medium text-gray-800">Pickup</span>
-                          <span className="block text-xs text-gray-500">Free (At store or UI/UCH location)</span>
+                    <label className="flex items-start p-2.5 md:p-3 border border-gray-300 rounded-lg hover:border-red-300 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="deliveryOption"
+                        value="pickup"
+                        checked={customerInfo.deliveryOption === "pickup"}
+                        onChange={(e) =>
+                          setCustomerInfo({
+                            ...customerInfo,
+                            deliveryOption: e.target.value as "pickup",
+                            pickupLocation: customerInfo.isUIAddress ? customerInfo.pickupLocation : customerInfo.deliveryAddress || storeLocation,
+                          })
+                        }
+                        className="h-4 w-4 mt-0.5 text-red-600 focus:ring-red-500"
+                        disabled={isProcessing || isSubmittingOrder}
+                      />
+                      <div className="ml-2 md:ml-3 flex-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm md:text-base font-medium text-gray-800">Pickup</span>
+                          <span className="text-xs md:text-sm font-semibold text-green-600">Free</span>
                         </div>
-                      </label>
-                    </>
+                        <span className="text-xs text-gray-500">At store or UI/UCH location</span>
+                      </div>
+                    </label>
                   )}
                 </div>
-                {estimatedDelivery && customerInfo.deliveryOption !== "pickup" && customerInfo.deliveryOption !== "nil" && (
-                  <p className="text-sm text-gray-600 mt-3 bg-red-50 p-2 rounded-md">
+
+                {/* Estimated Delivery - Only for express */}
+                {estimatedDelivery && customerInfo.deliveryOption === "express" && (
+                  <p className="text-xs text-gray-600 mt-3 bg-red-50 p-2 rounded-md flex items-center gap-1.5">
+                    <Clock size={14} className="text-red-500" />
                     <span className="font-medium">Estimated Delivery:</span> {estimatedDelivery}
                   </p>
                 )}
               </div>
 
-              {customerInfo.isUIAddress && customerInfo.deliveryOption === "timeframe" && (
-                <div className="bg-gray-50 p-4 rounded-xl">
-                  <label className="block text-sm font-medium mb-2 text-gray-700 flex items-center">
-                    <Home size={18} className="mr-2 text-red-500" />
-                    Delivery Time Slot *
-                  </label>
-                  <select
-                    required
-                    value={customerInfo.timeSlot}
-                    onChange={(e) =>
-                      setCustomerInfo({
-                        ...customerInfo,
-                        timeSlot: e.target.value as "12 PM" | "4 PM" | "9 PM" | "6 AM" | "nil",
-                      })
-                    }
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white appearance-none"
-                    aria-label="Delivery time slot"
-                  >
-                    <option value="" disabled>
-                      Select a time slot
-                    </option>
-                    {["12 PM", "4 PM", "9 PM", "6 AM"].map((slot) => (
-                      <option key={slot} value={slot}>
-                        {slot}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {(customerInfo.isUIAddress || customerInfo.deliveryOption === "pickup") && (
-                <div className="bg-gray-50 p-4 rounded-xl">
-                  <label className="block text-sm font-medium mb-2 text-gray-700 flex items-center">
-                    <Home size={18} className="mr-2 text-red-500" />
-                    {customerInfo.deliveryOption === "pickup" ? "Pickup Location *" : "Dropoff Location *"}
+              {/* Pickup Location - Only for pickup option */}
+              {customerInfo.isUIAddress && customerInfo.deliveryOption === "pickup" && (
+                <div className="bg-gray-50 p-3 md:p-4 rounded-lg md:rounded-xl">
+                  <label className="block text-xs md:text-sm font-medium mb-1.5 md:mb-2 text-gray-700 flex items-center">
+                    <MapPin size={16} className="mr-1.5 md:mr-2 text-red-500" />
+                    Pickup Location *
                   </label>
                   <select
                     required
                     value={customerInfo.pickupLocation.includes(customerInfo.deliveryAddress) ? customerInfo.pickupLocation.split(" - ")[1] || customerInfo.pickupLocation : customerInfo.pickupLocation}
                     onChange={(e) => handlePickupLocationChange(e.target.value)}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white appearance-none"
-                    aria-label={customerInfo.deliveryOption === "pickup" ? "Pickup location" : "Dropoff location"}
+                    className="w-full p-2.5 md:p-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white appearance-none"
+                    aria-label="Pickup location"
+                    disabled={isProcessing || isSubmittingOrder}
                   >
                     <option value="" disabled>
-                      Select a {customerInfo.deliveryOption === "pickup" ? "pickup" : "dropoff"} location
+                      Select a pickup location
                     </option>
-                    {customerInfo.deliveryOption === "pickup" && <option value={storeLocation}>{storeLocation}</option>}
+                    <option value={storeLocation}>{storeLocation}</option>
                     {customerInfo.deliveryAddress === "University of Ibadan" &&
                       uiPickupLocations.map((location) => (
                         <option key={location} value={location}>
@@ -541,11 +561,92 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </div>
               )}
 
-           
+              {/* Next Button - Mobile optimized */}
+              <div className="flex justify-end pt-3 md:pt-4">
+                <button
+                  type="button"
+                  onClick={handleNextStep}
+                  disabled={isProcessing || isSubmittingOrder}
+                  className="w-full sm:w-auto bg-gradient-to-r from-red-600 to-red-500 text-white px-6 md:px-8 py-3 md:py-3.5 rounded-xl font-bold hover:from-red-700 hover:to-red-600 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm md:text-base shadow-lg"
+                >
+                  Next: Payment Details
+                  <ChevronRight size={18} className="md:w-5 md:h-5" />
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Step 2: Payment & Confirmation - Mobile optimized */
+            <div className="space-y-4 md:space-y-5">
+              {/* Full Name */}
+              <div className="bg-gray-50 p-3 md:p-4 rounded-lg md:rounded-xl">
+                <label className="block text-xs md:text-sm font-medium mb-1.5 md:mb-2 text-gray-700 flex items-center">
+                  <User size={16} className="mr-1.5 md:mr-2 text-red-500" />
+                  Full Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={customerInfo.name}
+                  onChange={(e) => setCustomerInfo({ ...customerInfo, name: e.target.value })}
+                  className="w-full p-2.5 md:p-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white"
+                  placeholder="Enter your full name"
+                  aria-label="Full name"
+                  disabled={isProcessing || isSubmittingOrder}
+                />
+              </div>
 
-              <div className="bg-gray-50 p-4 rounded-xl">
-                <label className="block text-sm font-medium mb-2 text-gray-700 flex items-center">
-                  <CreditCard size={18} className="mr-2 text-red-500" />
+              {/* Email Address */}
+              <div className="bg-gray-50 p-3 md:p-4 rounded-lg md:rounded-xl">
+                <label className="block text-xs md:text-sm font-medium mb-1.5 md:mb-2 text-gray-700 flex items-center">
+                  <User size={16} className="mr-1.5 md:mr-2 text-red-500" />
+                  Email Address *
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={customerInfo.email}
+                  onChange={(e) => setCustomerInfo({ ...customerInfo, email: e.target.value })}
+                  className="w-full p-2.5 md:p-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white"
+                  placeholder="Enter your email address"
+                  aria-label="Email address"
+                  disabled={isProcessing || isSubmittingOrder}
+                />
+              </div>
+
+              {/* Discount Code */}
+              <div className="bg-gray-50 p-3 md:p-4 rounded-lg md:rounded-xl">
+                <label className="block text-xs md:text-sm font-medium mb-1.5 md:mb-2 text-gray-700">Discount Code</label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    value={customerInfo.discountCode || ""}
+                    onChange={(e) => setCustomerInfo({ ...customerInfo, discountCode: e.target.value })}
+                    className="flex-1 p-2.5 md:p-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white"
+                    placeholder="Enter discount code"
+                    aria-label="Discount code"
+                    disabled={isProcessing || isSubmittingOrder}
+                  />
+                  <button
+                    type="button"
+                    onClick={applyDiscountCode}
+                    disabled={isProcessing || isSubmittingOrder || !customerInfo.discountCode}
+                    className="w-full sm:w-auto px-4 py-2.5 md:py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  >
+                    Apply
+                  </button>
+                </div>
+                {discountError && <p className="text-xs text-red-600 mt-1.5">{discountError}</p>}
+                {appliedDiscount > 0 && (
+                  <p className="text-xs text-green-600 mt-1.5">
+                    Discount applied! You saved ₦{appliedDiscount.toLocaleString()}
+                  </p>
+                )}
+              </div>
+
+              {/* Bank Transaction Number */}
+              <div className="bg-gray-50 p-3 md:p-4 rounded-lg md:rounded-xl">
+                <label className="block text-xs md:text-sm font-medium mb-1.5 md:mb-2 text-gray-700 flex items-center">
+                  <CreditCard size={16} className="mr-1.5 md:mr-2 text-red-500" />
                   Bank Transaction Number *
                 </label>
                 <input
@@ -553,80 +654,70 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   required
                   value={customerInfo.transactionNumber}
                   onChange={(e) => setCustomerInfo({ ...customerInfo, transactionNumber: e.target.value })}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white"
+                  className="w-full p-2.5 md:p-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white"
                   placeholder="Enter bank transaction number"
                   aria-label="Bank transaction number"
+                  disabled={isProcessing || isSubmittingOrder}
                 />
-                <div className="mt-3 p-3 bg-red-50 rounded-lg">
-                  <p className="text-sm font-medium text-gray-800">Bank Account Details:</p>
-                  <p className="text-sm text-gray-600">Bank: Opay</p>
-                  <p className="text-sm text-gray-600">Account Name: Ollan Pharmacy Ltd</p>
-                  <p className="text-sm text-gray-600">Account Number: 7019312514</p>
-                  <p className="text-xs text-gray-500 mt-2">Please make the bank transfer and enter the transaction number above.</p>
+                <div className="mt-2 md:mt-3 p-2.5 md:p-3 bg-red-50 rounded-lg">
+                  <p className="text-xs md:text-sm font-medium text-gray-800">Bank Account Details:</p>
+                  <p className="text-xs text-gray-600">Bank: Opay</p>
+                  <p className="text-xs text-gray-600">Account Name: Ollan Pharmacy Ltd</p>
+                  <p className="text-xs text-gray-600">Account Number: 7019312514</p>
+                  <p className="text-xs text-gray-500 mt-1.5">Please make the bank transfer and enter the transaction number above.</p>
                 </div>
               </div>
-            </div>
-          </div>
 
-          <div className="mt-8 pt-6 border-t border-gray-200">
-            <div className="space-y-2 mb-6">
-              <div className="flex justify-between text-black">
-                <span>Subtotal:</span>
-                <span>₦{cartTotal.toLocaleString()}</span>
+              {/* Prescription Upload */}
+              <div className="bg-gray-50 p-3 md:p-4 rounded-lg md:rounded-xl">
+                <label className="block text-xs md:text-sm font-medium mb-1.5 md:mb-2 text-gray-700">Prescription (Optional)</label>
+                <input
+                  type="file"
+                  accept=".jpg,.jpeg,.png,.pdf"
+                  onChange={handlePrescriptionUpload}
+                  className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white file:mr-2 file:py-1 file:px-2 file:text-xs file:bg-red-50 file:text-red-600 file:border-0 file:rounded-md hover:file:bg-red-100"
+                  aria-label="Upload prescription"
+                  disabled={isProcessing || isSubmittingOrder}
+                />
+                <p className="text-xs text-gray-500 mt-1">Accepted formats: JPEG, PNG, PDF (Max 5MB)</p>
               </div>
-              <div className="flex justify-between text-black">
-                <span>Delivery Fee:</span>
-                <span>
-                  {customerInfo.deliveryOption && customerInfo.discountCode && freeDeliveryPromoCodes.map(c => c.toLowerCase()).includes(customerInfo.discountCode.toLowerCase())
-                    ? "Free"
-                    : customerInfo.deliveryOption && customerInfo.deliveryOption !== "nil"
-                    ? customerInfo.deliveryOption === "express"
-                      ? "₦500"
-                      : customerInfo.deliveryOption === "pickup"
-                      ? "Free"
-                      : cartTotal >= 5000
-                      ? "Free"
-                      : "₦500"
-                    : "N/A"}
-                </span>
-              </div>
-              {appliedDiscount > 0 && (
-                <div className="flex justify-between text-green-600">
-                  <span>
-                    {discountPromoCodes.map(c => c.toLowerCase()).includes(customerInfo.discountCode?.toLowerCase() || "")
-                      ? "Discount (10% on supermarket items)"
-                      : "Free Delivery Discount"}
-                  </span>
-                  <span>-₦{appliedDiscount.toLocaleString()}</span>
-                </div>
-              )}
-              <div className="flex justify-between text-2xl font-bold text-red-600">
-                <span>Total:</span>
-                <span>₦{discountedTotal.toLocaleString()}</span>
+
+              {/* Navigation and Submit Buttons - Mobile optimized */}
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-3 md:pt-4">
+                <button
+                  type="button"
+                  onClick={handlePrevStep}
+                  disabled={isProcessing || isSubmittingOrder}
+                  className="w-full sm:flex-1 bg-gray-100 text-gray-700 px-4 md:px-6 py-3 md:py-3.5 rounded-xl font-bold hover:bg-gray-200 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm md:text-base order-2 sm:order-1"
+                >
+                  <ChevronLeft size={18} className="md:w-5 md:h-5" />
+                  Back
+                </button>
+                <button
+                  type="submit"
+                  disabled={isProcessing || isSubmittingOrder || !!addressError}
+                  className="w-full sm:flex-1 bg-gradient-to-r from-red-600 to-red-500 text-white py-3 md:py-3.5 rounded-xl font-bold hover:from-red-700 hover:to-red-600 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm md:text-base shadow-lg order-1 sm:order-2"
+                  aria-label="Submit order"
+                >
+                  {isProcessing || isSubmittingOrder ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 md:h-5 md:w-5 border-b-2 border-white mr-1"></div>
+                      <span className="text-sm md:text-base">Submitting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard size={18} className="md:w-5 md:h-5" />
+                      <span className="text-sm md:text-base">Submit Order</span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
-            <button
-              type="submit"
-              disabled={isProcessing || !!addressError}
-              className="w-full bg-gradient-to-r from-red-600 to-red-500 text-white py-4 rounded-xl font-bold hover:from-red-700 hover:to-red-600 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center shadow-lg hover:shadow-red-200"
-              aria-label="Submit order"
-            >
-              {isProcessing ? (
-                <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                  Submitting Order...
-                </>
-              ) : (
-                <>
-                  <CreditCard size={20} className="mr-2" />
-                  Submit Order (₦{discountedTotal.toLocaleString()})
-                </>
-              )}
-            </button>
-            <p className="text-xs text-center text-gray-500 mt-3">
-              Your personal data will be used to process your order and for other purposes described in our privacy policy.
-            </p>
-          </div>
+          )}
+
+          <p className="text-xs text-center text-gray-500 mt-4 md:mt-6">
+            Your personal data will be used to process your order and for other purposes described in our privacy policy.
+          </p>
         </form>
       </div>
     </div>
