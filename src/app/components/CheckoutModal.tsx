@@ -49,11 +49,41 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const [currentStep, setCurrentStep] = useState<1 | 2>(1);
-  const [deliveryAddressError, setDeliveryAddressError] = useState<string>("");
+  const [deliveryAreaError, setDeliveryAreaError] = useState<string>("");
+  const [deliveryLocationError, setDeliveryLocationError] = useState<string>("");
 
   // Delivery areas
   const deliveryAreas = ["Agbowo", "University of Ibadan"];
   
+  // Delivery locations for Agbowo
+  const agbowoLocations = [
+    "Agbowo - First Gate",
+    "Agbowo - Second Gate", 
+    "Agbowo - UCH School",
+    "Agbowo - Shopping Complex",
+    "Agbowo - Market Area",
+    "Agbowo - Police Station",
+    "Agbowo - Baptist Church",
+  ];
+
+  // Delivery locations for University of Ibadan
+  const uiLocations = [
+    "UI - School Gate",
+    "UI - Tedder",
+    "UI - Zik",
+    "UI - Tech TLT",
+    "UI - Social Sciences",
+    "UI - Law",
+    "UI - Education LLLT",
+    "UI - Awo Junction",
+    "UI - Amina Way",
+    "UI - Abadina",
+    "UI - Benue Road",
+    "UI - SUB",
+    "UI - Saint Annes",
+    "UI - Indy Hall",
+  ];
+
   // Reset to step 1 when modal opens
   useEffect(() => {
     if (isOpen) {
@@ -90,8 +120,19 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       ...prev,
       deliveryAddress: area,
       isUIAddress,
+      // Clear the specific location when area changes
+      pickupLocation: "",
       timeSlot: "nil",
     }));
+    setDeliveryAreaError("");
+  };
+
+  const handleDeliveryLocationChange = (location: string) => {
+    setCustomerInfo((prev: CustomerInfo) => ({
+      ...prev,
+      pickupLocation: location,
+    }));
+    setDeliveryLocationError("");
   };
 
   const validateStep1 = (): boolean => {
@@ -105,11 +146,16 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     // Check if delivery option is express
     const isExpress = customerInfo.deliveryOption === "express";
     
-    // Only validate delivery address for express delivery
+    // Only validate for express delivery
     if (isExpress) {
       if (!customerInfo.deliveryAddress) {
         errors.push("Delivery Area is required");
-        setDeliveryAddressError("Please select a delivery area");
+        setDeliveryAreaError("Please select a delivery area");
+      }
+      
+      if (!customerInfo.pickupLocation) {
+        errors.push("Delivery Location is required");
+        setDeliveryLocationError("Please select a specific delivery location");
       }
     }
 
@@ -153,7 +199,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       phone: customerInfo.phone.trim(),
       prescription: null,
       deliveryOption: customerInfo.deliveryOption,
-      pickupLocation: "",
+      pickupLocation: isExpress ? customerInfo.pickupLocation : "",
       deliveryAddress: isExpress ? customerInfo.deliveryAddress.trim() : "nil",
       timeSlot: "nil",
       isUIAddress: isExpress ? customerInfo.isUIAddress : false,
@@ -177,6 +223,16 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const isPickupOption = (): boolean => {
     return customerInfo.deliveryOption === "pickup";
+  };
+
+  // Get locations based on selected delivery area
+  const getDeliveryLocations = (): string[] => {
+    if (customerInfo.deliveryAddress === "Agbowo") {
+      return agbowoLocations;
+    } else if (customerInfo.deliveryAddress === "University of Ibadan") {
+      return uiLocations;
+    }
+    return [];
   };
 
   // Step indicator - Mobile responsive
@@ -235,6 +291,8 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const isExpress = isExpressOption();
   const isPickup = isPickupOption();
+  const deliveryLocations = getDeliveryLocations();
+  const hasSelectedArea = !!customerInfo.deliveryAddress;
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
@@ -306,8 +364,10 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                           ...prev,
                           deliveryOption: e.target.value as "express",
                           deliveryAddress: "",
+                          pickupLocation: "",
                         }));
-                        setDeliveryAddressError("");
+                        setDeliveryAreaError("");
+                        setDeliveryLocationError("");
                       }}
                       className="h-4 w-4 mt-0.5 text-red-600 focus:ring-red-500"
                       disabled={isProcessing || isSubmittingOrder}
@@ -333,9 +393,11 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                           ...prev,
                           deliveryOption: e.target.value as "pickup",
                           deliveryAddress: "",
+                          pickupLocation: "",
                           isUIAddress: false,
                         }));
-                        setDeliveryAddressError("");
+                        setDeliveryAreaError("");
+                        setDeliveryLocationError("");
                       }}
                       className="h-4 w-4 mt-0.5 text-red-600 focus:ring-red-500"
                       disabled={isProcessing || isSubmittingOrder}
@@ -383,12 +445,38 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       </option>
                     ))}
                   </select>
-                  {deliveryAddressError && <p className="text-xs text-red-600 mt-1.5">{deliveryAddressError}</p>}
-                  {customerInfo.deliveryAddress && (
-                    <p className="text-xs text-gray-600 mt-2">
-                      Our rider will contact you to confirm your exact location in {customerInfo.deliveryAddress}.
-                    </p>
-                  )}
+                  {deliveryAreaError && <p className="text-xs text-red-600 mt-1.5">{deliveryAreaError}</p>}
+                </div>
+              )}
+
+              {/* Delivery Location - Only show if Express is selected AND an area is selected */}
+              {isExpress && hasSelectedArea && (
+                <div className="bg-gray-50 p-3 md:p-4 rounded-lg md:rounded-xl">
+                  <label className="block text-xs md:text-sm font-medium mb-1.5 md:mb-2 text-gray-700 flex items-center">
+                    <MapPin size={16} className="mr-1.5 md:mr-2 text-red-500" />
+                    Delivery Location *
+                  </label>
+                  <select
+                    required={isExpress}
+                    value={customerInfo.pickupLocation || ""}
+                    onChange={(e) => handleDeliveryLocationChange(e.target.value)}
+                    className="w-full p-2.5 md:p-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white appearance-none"
+                    aria-label="Delivery location"
+                    disabled={isProcessing || isSubmittingOrder}
+                  >
+                    <option value="" disabled>
+                      Select a specific location in {customerInfo.deliveryAddress}
+                    </option>
+                    {deliveryLocations.map((location) => (
+                      <option key={location} value={location}>
+                        {location}
+                      </option>
+                    ))}
+                  </select>
+                  {deliveryLocationError && <p className="text-xs text-red-600 mt-1.5">{deliveryLocationError}</p>}
+                  <p className="text-xs text-gray-600 mt-2">
+                    Our rider will deliver to this specific location in {customerInfo.deliveryAddress}.
+                  </p>
                 </div>
               )}
 
@@ -498,7 +586,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={isProcessing || isSubmittingOrder || (isExpress && !customerInfo.deliveryAddress)}
+                  disabled={isProcessing || isSubmittingOrder || (isExpress && (!customerInfo.deliveryAddress || !customerInfo.pickupLocation))}
                   className="w-full sm:flex-1 bg-gradient-to-r from-red-600 to-red-500 text-white py-3 md:py-3.5 rounded-xl font-bold hover:from-red-700 hover:to-red-600 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm md:text-base shadow-lg order-1 sm:order-2"
                   aria-label="Submit order"
                 >
