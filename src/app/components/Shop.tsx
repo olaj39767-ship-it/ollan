@@ -142,12 +142,14 @@ const getProductBundleInfo = (productName: string, quantity: number, price: numb
   };
 };
 
+// In PharmacyApp.tsx, update the CustomerInfo interface:
+
 interface CustomerInfo {
   name: string;
   email: string;
   phone: string;
   prescription?: File | null;
-  deliveryOption: "express" | "timeframe" | "pickup" | "" | "nil";
+  deliveryOption: "express" | "timeframe" | "pickup" | "" | "nil"; // Make sure "pickup" is included
   pickupLocation: string;
   deliveryAddress: string;
   timeSlot: "12 PM" | "4 PM" | "9 PM" | "6 AM" | "" | "nil";
