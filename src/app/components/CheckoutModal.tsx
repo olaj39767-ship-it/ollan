@@ -53,8 +53,8 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [addressError, setAddressError] = useState<string>("");
   const [showCustomAddress, setShowCustomAddress] = useState<boolean>(false);
 
-  const deliveryAreas = ["UCH", "Bodija", "Orogun", "Basorun", "University of Ibadan", "Other"];
-  const storeLocation = "Store (1 Fadare Close, Iwo Road)";
+  const deliveryAreas = ["Agbowo",  "University of Ibadan"];
+  const storeLocation = "Independence Hall, University Ibadan";
 
   // Reset to step 1 when modal opens
   useEffect(() => {
