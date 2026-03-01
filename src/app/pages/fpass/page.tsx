@@ -68,7 +68,7 @@ export default function ForgotPassword() {
 
       if (!res.ok) return showMsg("error", data.message || "Something went wrong.");
       showMsg("success", "Password reset successful! Redirecting to login…");
-      setTimeout(() => { window.location.href = "/pages/si"; }, 2000);
+      setTimeout(() => { window.location.href = "/pages/signin"; }, 2000);
     } catch {
       showMsg("error", "Unable to connect. Check your connection and try again.");
     }
