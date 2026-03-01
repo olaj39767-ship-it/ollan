@@ -331,19 +331,25 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
               {/* Phone Number */}
               <div className="bg-gray-50 p-3 md:p-4 rounded-lg md:rounded-xl">
                 <label className="block text-xs md:text-sm font-medium mb-1.5 md:mb-2 text-gray-700 flex items-center">
-                  <Phone size={16} className="mr-1.5 md:mr-2 text-red-500" />
+                  <Phone size={11} className="mr-1.5 md:mr-2 text-red-500" />
                   Phone Number *
                 </label>
-                <input
-                  type="tel"
-                  required
-                  value={customerInfo.phone}
-                  onChange={(e) => setCustomerInfo((prev: CustomerInfo) => ({ ...prev, phone: e.target.value }))}
-                  className="w-full p-2.5 md:p-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white"
-                  placeholder="Enter your phone number"
-                  aria-label="Phone number"
-                  disabled={isProcessing || isSubmittingOrder}
-                />
+               <input
+  type="tel"
+  required
+  value={customerInfo.phone}
+  onChange={(e) => {
+    const numericOnly = e.target.value.replace(/[^0-9+\-\s()]/g, '');
+    setCustomerInfo((prev: CustomerInfo) => ({ ...prev, phone: numericOnly }));
+  }}
+  onKeyDown={(e) => {
+    if (/[a-zA-Z]/.test(e.key)) e.preventDefault();
+  }}
+  className="w-full p-2.5 md:p-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white"
+  placeholder="Enter your phone number"
+  aria-label="Phone number"
+  disabled={isProcessing || isSubmittingOrder}
+/>
               </div>
 
               {/* Delivery Options */}
@@ -566,9 +572,9 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 />
                 <div className="mt-2 md:mt-3 p-2.5 md:p-3 bg-red-50 rounded-lg">
                   <p className="text-xs md:text-sm font-medium text-gray-800">Bank Account Details:</p>
-                  <p className="text-xs text-gray-600">Bank: Opay</p>
-                  <p className="text-xs text-gray-600">Account Name: Ollan Pharmacy Ltd</p>
-                  <p className="text-xs text-gray-600">Account Number: 7019312514</p>
+                  <p className="text-xs text-gray-600">Bank: Moniepoint</p>
+                  <p className="text-xs text-gray-600">Account Name: Ollan Essentials</p>
+                  <p className="text-xs text-gray-600">Account Number: 6617900839</p>
                   <p className="text-xs text-gray-500 mt-1.5">Please make the bank transfer and enter the transaction number above.</p>
                 </div>
               </div>
