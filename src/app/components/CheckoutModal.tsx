@@ -2,6 +2,7 @@
 
 import React, { useRef, useEffect, useState } from "react";
 import { X, User, Phone, Home, CreditCard, ChevronRight, ChevronLeft, ShoppingBag, MapPin, Clock, Store } from "lucide-react";
+import { Copy, Check } from "lucide-react";
 
 export interface CustomerInfo {
   name: string;
@@ -51,6 +52,13 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [currentStep, setCurrentStep] = useState<1 | 2>(1);
   const [deliveryAreaError, setDeliveryAreaError] = useState<string>("");
   const [deliveryLocationError, setDeliveryLocationError] = useState<string>("");
+  const [copied, setCopied] = useState(false);
+
+const handleCopy = () => {
+  navigator.clipboard.writeText("6617900839"); // replace with your actual value
+  setCopied(true);
+  setTimeout(() => setCopied(false), 2000);
+};
 
   // Delivery areas
   const deliveryAreas = ["Agbowo", "University of Ibadan"];
@@ -570,13 +578,27 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   aria-label="Bank transaction number"
                   disabled={isProcessing || isSubmittingOrder}
                 />
-                <div className="mt-2 md:mt-3 p-2.5 md:p-3 bg-red-50 rounded-lg">
-                  <p className="text-xs md:text-sm font-medium text-gray-800">Bank Account Details:</p>
-                  <p className="text-xs text-gray-600">Bank: Moniepoint</p>
-                  <p className="text-xs text-gray-600">Account Name: Ollan Essentials</p>
-                  <p className="text-xs text-gray-600">Account Number: 6617900839</p>
-                  <p className="text-xs text-gray-500 mt-1.5">Please make the bank transfer and enter the transaction number above.</p>
-                </div>
+               <div className="bg-gray-50 p-3 md:p-4 rounded-lg md:rounded-xl">
+  <label className="block text-xs md:text-sm font-medium mb-1.5 md:mb-2 text-gray-700 flex items-center">
+    Account Number
+  </label>
+  <div className="flex items-center gap-2">
+    <input
+      type="text"
+      readOnly
+      value="6617900839" // replace with your actual value
+      className="w-full p-2.5 md:p-3 text-sm border border-gray-300 rounded-lg text-gray-800 bg-white"
+    />
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors shrink-0"
+    >
+      {copied ? <Check size={14} /> : <Copy size={14} />}
+      {copied ? "Copied!" : "Copy"}
+    </button>
+  </div>
+</div>
               </div>
 
               {/* Navigation and Submit Buttons - Mobile optimized */}
