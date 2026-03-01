@@ -11,24 +11,25 @@ export interface CustomerInfo {
   deliveryOption: "express" | "timeframe" | "pickup" | "" | "nil";
   pickupLocation: string;
   deliveryAddress: string;
-  timeSlot?: "12 PM" | "4 PM" | "9 PM" | "6 AM" | "" | "nil"; // Made optional
+  timeSlot?: "12 PM" | "4 PM" | "9 PM" | "6 AM" | "" | "nil";
   isUIAddress: boolean;
   transactionNumber: string;
   discountCode?: string;
+  [key: string]: any; // Allow additional properties
 }
 
 interface CheckoutModalProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
   customerInfo: CustomerInfo;
-  setCustomerInfo: React.Dispatch<React.SetStateAction<CustomerInfo>>;
+  setCustomerInfo: React.Dispatch<React.SetStateAction<any>>; // More flexible
   cartTotal: number;
   deliveryFee: number;
   grandTotal: number;
   estimatedDelivery: string;
   isProcessing: boolean;
   isSubmittingOrder?: boolean;
-  submitOrder: (customerInfo: CustomerInfo) => void;
+  submitOrder: (info: any) => Promise<void> | void; // Accept both sync and async
   cart: { productId: { _id: string; price: number; category?: string }; quantity: number }[];
 }
 
@@ -54,7 +55,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [appliedDiscount, setAppliedDiscount] = useState<number>(0);
   const [showCustomAddress, setShowCustomAddress] = useState<boolean>(false);
 
-  const deliveryAreas = ["University of Ibadan", "Agbowo Area"];
+  const deliveryAreas = ["UCH", "Bodija", "Orogun", "Basorun", "University of Ibadan", "Other"];
   const uiPickupLocations = [
     "School Gate",
     "Tedder",
@@ -71,7 +72,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     "Saint Annes",
   ];
   const uchPickupLocations = ["ABH", "First Gate", "Second Gate", "UCH School"];
-  const storeLocation = "Inependence Hall, University of ibadan"; // Store pickup location for non-UI/UCH deliveries
+  const storeLocation = "Store (1 Fadare Close, Iwo Road)";
 
   // Promo codes for 10% discount on supermarket items
   const discountPromoCodes = ["OllAN10", "MUIZAT10", "ABDUL10", "OYIN10", "WEST10", "BLESS10", "EMMA10"];
@@ -81,13 +82,13 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const validPromoAreas = ["University of Ibadan", "UCH"];
 
   // Reset to step 1 when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      setCurrentStep(1);
-      // Reset timeSlot to nil when modal opens
-      setCustomerInfo(prev => ({ ...prev, timeSlot: "nil" }));
-    }
-  }, [isOpen, setCustomerInfo]);
+useEffect(() => {
+  if (isOpen) {
+    setCurrentStep(1);
+    // Reset timeSlot to nil when modal opens
+    setCustomerInfo((prev: CustomerInfo) => ({ ...prev, timeSlot: "nil" }));
+  }
+}, [isOpen, setCustomerInfo]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -117,23 +118,23 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     
     setShowCustomAddress(isOtherArea);
     
-    setCustomerInfo({
-      ...customerInfo,
+    setCustomerInfo((prev: CustomerInfo) => ({
+      ...prev,
       deliveryAddress: isOtherArea ? "" : area,
       isUIAddress,
-      deliveryOption: isUIAddress ? customerInfo.deliveryOption || "express" : "express",
-      pickupLocation: isUIAddress && customerInfo.deliveryOption === "pickup" ? customerInfo.pickupLocation : isOtherArea ? "" : area,
-      timeSlot: "nil", // Always set to nil
-    });
+      deliveryOption: isUIAddress ? prev.deliveryOption || "express" : "express",
+      pickupLocation: isUIAddress && prev.deliveryOption === "pickup" ? prev.pickupLocation : isOtherArea ? "" : area,
+      timeSlot: "nil",
+    }));
     setAddressError("");
   };
 
   const handleCustomAddressChange = (address: string) => {
-    setCustomerInfo({
-      ...customerInfo,
+    setCustomerInfo((prev: CustomerInfo) => ({
+      ...prev,
       deliveryAddress: address,
       pickupLocation: address,
-    });
+    }));
     if (address.trim()) {
       setAddressError("");
     } else {
@@ -142,12 +143,14 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   };
 
   const handlePickupLocationChange = (location: string) => {
-    const concatenatedLocation = customerInfo.deliveryAddress && location && customerInfo.deliveryOption === "pickup"
-      ? `${customerInfo.deliveryAddress} - ${location}`
-      : location || customerInfo.deliveryAddress || "";
-    setCustomerInfo({
-      ...customerInfo,
-      pickupLocation: concatenatedLocation,
+    setCustomerInfo((prev: CustomerInfo) => {
+      const concatenatedLocation = prev.deliveryAddress && location && prev.deliveryOption === "pickup"
+        ? `${prev.deliveryAddress} - ${location}`
+        : location || prev.deliveryAddress || "";
+      return {
+        ...prev,
+        pickupLocation: concatenatedLocation,
+      };
     });
   };
 
@@ -236,7 +239,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     setCurrentStep(1);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const errors: string[] = [];
@@ -271,7 +274,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       isUIAddress: sanitizedCustomerInfo.isUIAddress ? "true" : "false",
     });
 
-    submitOrder(sanitizedCustomerInfo);
+    await submitOrder(sanitizedCustomerInfo);
   };
 
   const handlePrescriptionUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -286,7 +289,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         alert("File size must be less than 5MB.");
         return;
       }
-      setCustomerInfo({ ...customerInfo, prescription: file });
+      setCustomerInfo((prev: CustomerInfo) => ({ ...prev, prescription: file }));
     }
   };
 
@@ -401,7 +404,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   type="tel"
                   required
                   value={customerInfo.phone}
-                  onChange={(e) => setCustomerInfo({ ...customerInfo, phone: e.target.value })}
+                  onChange={(e) => setCustomerInfo((prev: CustomerInfo) => ({ ...prev, phone: e.target.value }))}
                   className="w-full p-2.5 md:p-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white"
                   placeholder="Enter your phone number"
                   aria-label="Phone number"
@@ -470,11 +473,11 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       value="express"
                       checked={customerInfo.deliveryOption === "express"}
                       onChange={(e) =>
-                        setCustomerInfo({
-                          ...customerInfo,
+                        setCustomerInfo((prev: CustomerInfo) => ({
+                          ...prev,
                           deliveryOption: e.target.value as "express",
-                          pickupLocation: customerInfo.deliveryAddress || "",
-                        })
+                          pickupLocation: prev.deliveryAddress || "",
+                        }))
                       }
                       className="h-4 w-4 mt-0.5 text-red-600 focus:ring-red-500"
                       disabled={isProcessing || isSubmittingOrder}
@@ -497,11 +500,11 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                         value="pickup"
                         checked={customerInfo.deliveryOption === "pickup"}
                         onChange={(e) =>
-                          setCustomerInfo({
-                            ...customerInfo,
+                          setCustomerInfo((prev: CustomerInfo) => ({
+                            ...prev,
                             deliveryOption: e.target.value as "pickup",
-                            pickupLocation: customerInfo.isUIAddress ? customerInfo.pickupLocation : customerInfo.deliveryAddress || storeLocation,
-                          })
+                            pickupLocation: prev.isUIAddress ? prev.pickupLocation : prev.deliveryAddress || storeLocation,
+                          }))
                         }
                         className="h-4 w-4 mt-0.5 text-red-600 focus:ring-red-500"
                         disabled={isProcessing || isSubmittingOrder}
@@ -587,7 +590,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   type="text"
                   required
                   value={customerInfo.name}
-                  onChange={(e) => setCustomerInfo({ ...customerInfo, name: e.target.value })}
+                  onChange={(e) => setCustomerInfo((prev: CustomerInfo) => ({ ...prev, name: e.target.value }))}
                   className="w-full p-2.5 md:p-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white"
                   placeholder="Enter your full name"
                   aria-label="Full name"
@@ -605,7 +608,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   type="email"
                   required
                   value={customerInfo.email}
-                  onChange={(e) => setCustomerInfo({ ...customerInfo, email: e.target.value })}
+                  onChange={(e) => setCustomerInfo((prev: CustomerInfo) => ({ ...prev, email: e.target.value }))}
                   className="w-full p-2.5 md:p-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white"
                   placeholder="Enter your email address"
                   aria-label="Email address"
@@ -620,7 +623,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   <input
                     type="text"
                     value={customerInfo.discountCode || ""}
-                    onChange={(e) => setCustomerInfo({ ...customerInfo, discountCode: e.target.value })}
+                    onChange={(e) => setCustomerInfo((prev: CustomerInfo) => ({ ...prev, discountCode: e.target.value }))}
                     className="flex-1 p-2.5 md:p-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white"
                     placeholder="Enter discount code"
                     aria-label="Discount code"
@@ -653,7 +656,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   type="text"
                   required
                   value={customerInfo.transactionNumber}
-                  onChange={(e) => setCustomerInfo({ ...customerInfo, transactionNumber: e.target.value })}
+                  onChange={(e) => setCustomerInfo((prev: CustomerInfo) => ({ ...prev, transactionNumber: e.target.value }))}
                   className="w-full p-2.5 md:p-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white"
                   placeholder="Enter bank transaction number"
                   aria-label="Bank transaction number"
