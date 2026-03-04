@@ -402,9 +402,9 @@ const PharmacyApp: React.FC = () => {
 
   const deliveryFee = cartTotal > 0
     ? customerInfo.deliveryOption === "express"
-      ? 1500
+      ? 0
       : customerInfo.deliveryOption === "timeframe" && cartTotal < 5000
-      ? 500
+      ? 0
       : 0
     : 0;
   const grandTotal = cartTotal ;

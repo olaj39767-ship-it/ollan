@@ -69,18 +69,7 @@ export default function DashboardHeader() {
                 >
                   Seller Dashboard
                 </button>
-                <button
-                  onClick={() => router.push("/admin/add-product")}
-                  className="px-4 py-2 text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors whitespace-nowrap"
-                >
-                  Add Products
-                </button>
-                <button
-                  onClick={() => router.push("/admin/update-product")}
-                  className="px-4 py-2 text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors whitespace-nowrap"
-                >
-                  Update Product
-                </button>
+               
               </>
             ) : user?.role === "rider" ? (
               <button
@@ -141,24 +130,7 @@ export default function DashboardHeader() {
                   >
                     Seller Dashboard
                   </button>
-                  <button
-                    onClick={() => {
-                      router.push("/admin/add-product");
-                      setIsMobileMenuOpen(false);
-                    }}
-                    className="w-full text-left px-4 py-3 text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
-                  >
-                    Add Products
-                  </button>
-                  <button
-                    onClick={() => {
-                      router.push("/admin/update-product");
-                      setIsMobileMenuOpen(false);
-                    }}
-                    className="w-full text-left px-4 py-3 text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
-                  >
-                    Update Product
-                  </button>
+                
                 </>
               ) : user?.role === "rider" ? (
                 <button
