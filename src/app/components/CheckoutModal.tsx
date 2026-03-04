@@ -1,12 +1,10 @@
-
-
 "use client";
 
 import React, { useRef, useEffect, useState, useCallback } from "react";
 import {
   X, User, Phone, CreditCard, ChevronRight, ChevronLeft,
   ShoppingBag, MapPin, Clock, Store, Upload, Image as ImageIcon,
-  CheckCircle, AlertCircle
+  CheckCircle, AlertCircle, Copy, Check
 } from "lucide-react";
 
 export interface CustomerInfo {
@@ -41,14 +39,12 @@ interface CheckoutModalProps {
   cart: { productId: { _id: string; price: number; category?: string }; quantity: number }[];
 }
 
-// ─── Unique Order ID ───────────────────────────────────────────────────────────
 const generateOrderId = (): string => {
   const ts = Date.now().toString(36).toUpperCase();
   const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
   return `ORD-${ts}-${rand}`;
 };
 
-// ─── Send email via your API route ────────────────────────────────────────────
 const fileToBase64 = (file: File): Promise<{ base64: string; mime: string }> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -96,7 +92,53 @@ const sendPaymentEmail = async (info: CustomerInfo, grandTotal: number) => {
   }
 };
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ── CopyField ─────────────────────────────────────────────────────────────────
+const CopyField: React.FC<{ label: string; value: string; highlight?: boolean }> = ({
+  label, value, highlight = false,
+}) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // fallback
+      const el = document.createElement("textarea");
+      el.value = value;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  return (
+    <div className={`flex items-center justify-between py-2 px-3 rounded-lg ${highlight ? "bg-amber-100 border border-amber-300" : "bg-white border border-amber-200"}`}>
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] text-amber-600 font-semibold uppercase tracking-wider">{label}</p>
+        <p className={`text-sm font-bold truncate ${highlight ? "text-amber-900" : "text-amber-800"}`}>{value}</p>
+      </div>
+      <button
+        type="button"
+        onClick={handleCopy}
+        className={`ml-2 flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-95 ${
+          copied
+            ? "bg-green-500 text-white"
+            : "bg-amber-200 hover:bg-amber-300 text-amber-800"
+        }`}
+      >
+        {copied ? <Check size={12} /> : <Copy size={12} />}
+        {copied ? "Copied!" : "Copy"}
+      </button>
+    </div>
+  );
+};
+
+// ── Main Component ────────────────────────────────────────────────────────────
 const CheckoutModal: React.FC<CheckoutModalProps> = ({
   isOpen, setIsOpen, customerInfo, setCustomerInfo,
   cartTotal, deliveryFee, grandTotal, estimatedDelivery,
@@ -126,7 +168,6 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     "UI - Benue Road", "UI - SUB", "UI - Saint Annes", "UI - Indy Hall",
   ];
 
-  // Reset on open
   useEffect(() => {
     if (isOpen) {
       setCurrentStep(1);
@@ -154,7 +195,6 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     };
   }, [isOpen, setIsOpen]);
 
-  // ── Screenshot handlers ──────────────────────────────────────────────────────
   const handleScreenshotFile = useCallback((file: File) => {
     if (!file.type.startsWith("image/")) { alert("Please upload an image file."); return; }
     if (file.size > 5 * 1024 * 1024) { alert("Screenshot must be under 5 MB"); return; }
@@ -186,7 +226,6 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     if (screenshotInputRef.current) screenshotInputRef.current.value = "";
   };
 
-  // ── Delivery helpers ─────────────────────────────────────────────────────────
   const handleDeliveryAreaChange = (area: string) => {
     setCustomerInfo((prev: CustomerInfo) => ({
       ...prev, deliveryAddress: area,
@@ -202,7 +241,6 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     return [];
   };
 
-  // ── Validation ───────────────────────────────────────────────────────────────
   const validateStep1 = (): boolean => {
     const errors: string[] = [];
     if (!customerInfo.phone.trim()) errors.push("Phone Number is required");
@@ -222,7 +260,6 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     return true;
   };
 
-  // ── Submit ───────────────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const errors: string[] = [];
@@ -252,9 +289,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       paymentScreenshot: customerInfo.paymentScreenshot ?? null,
     };
 
-    // Send email fire-and-forget (don't block order submission)
     sendPaymentEmail(sanitized, grandTotal).catch(console.error);
-
     await submitOrder(sanitized);
   };
 
@@ -266,374 +301,440 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const deliveryLocations = getDeliveryLocations();
   const orderId = customerInfo.orderId ?? "";
 
-  // ── Sub-components ───────────────────────────────────────────────────────────
-  const StepIndicator = () => (
-    <div className="flex items-center justify-center mb-4 md:mb-6">
-      <div className="flex items-center w-full max-w-xs">
-        {[1, 2].map((step, i) => (
-          <React.Fragment key={step}>
-            {i > 0 && <div className={`flex-1 h-1 mx-1 md:mx-2 transition-colors ${currentStep >= step ? "bg-red-500" : "bg-gray-200"}`} />}
-            <div className={`flex items-center justify-center w-7 h-7 md:w-8 md:h-8 rounded-full text-xs md:text-sm font-bold transition-colors ${currentStep >= step ? "bg-red-500 text-white" : "bg-gray-200 text-gray-500"}`}>
-              {step}
-            </div>
-          </React.Fragment>
-        ))}
-      </div>
-    </div>
-  );
-
-  const OrderSummary = () => {
-  const feeText = !customerInfo.deliveryOption || customerInfo.deliveryOption === "nil" ? "N/A" : "Free";
-    return (
-      <div className="bg-gradient-to-r from-red-50 to-orange-50 p-3 md:p-4 rounded-xl mb-4 md:mb-6 border border-red-100">
-        <div className="flex items-center gap-2 mb-2 md:mb-3">
-          <ShoppingBag size={18} className="text-red-500" />
-          <h3 className="font-bold text-gray-900 text-sm md:text-base">Order Summary</h3>
-          <span className="ml-auto text-[10px] md:text-xs font-mono bg-red-100 text-red-700 px-2 py-0.5 rounded-full border border-red-200 select-all">
-            {orderId}
-          </span>
-        </div>
-        <div className="space-y-1.5 md:space-y-2">
-          <div className="flex justify-between text-xs md:text-sm">
-            <span className="text-gray-600">Subtotal:</span>
-            <span className="font-medium">₦{cartTotal.toLocaleString()}</span>
-          </div>
-          <div className="flex justify-between text-xs md:text-sm">
-            <span className="text-gray-600">Delivery Fee:</span>
-            <span className="font-medium">{feeText}</span>
-          </div>
-          <div className="border-t border-red-200 pt-1.5 md:pt-2 flex justify-between font-bold text-red-600 text-sm md:text-base">
-            <span>Total:</span>
-            <span>₦{grandTotal.toLocaleString()}</span>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
-      <div ref={modalRef} className="bg-white rounded-xl md:rounded-2xl w-full max-w-4xl max-h-[98vh] md:max-h-[95vh] overflow-y-auto shadow-2xl">
-        
-        {/* Header */}
-        <div className="sticky top-0 z-10 bg-gradient-to-r from-red-50 to-white border-b border-gray-200 p-4 md:p-6">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <h2 className="text-lg md:text-2xl font-bold text-gray-900">Complete Your Order</h2>
-              <p className="text-xs md:text-sm text-gray-600 mt-0.5">
-                Step {currentStep} of 2: {currentStep === 1 ? "Delivery Details" : "Payment & Confirmation"}
-              </p>
-            </div>
-            <button onClick={() => setIsOpen(false)} className="p-1.5 md:p-2 hover:bg-gray-100 rounded-full flex-shrink-0"
-              disabled={isProcessing || isSubmittingOrder}>
-              <X size={20} className="text-gray-500" />
-            </button>
-          </div>
-          <StepIndicator />
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
+      {/* Sheet slides up from bottom on mobile, centered modal on desktop */}
+      <div
+        ref={modalRef}
+        className="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-3xl max-h-[95dvh] flex flex-col shadow-2xl overflow-hidden"
+        style={{ maxHeight: "95dvh" }}
+      >
+        {/* ── Drag handle (mobile) ── */}
+        <div className="flex justify-center pt-3 pb-1 sm:hidden">
+          <div className="w-10 h-1 bg-gray-300 rounded-full" />
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 md:p-8">
-          <OrderSummary />
+        {/* ── Header ── */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            {/* Step back arrow */}
+            {currentStep === 2 && (
+              <button
+                type="button"
+                onClick={() => setCurrentStep(1)}
+                disabled={isProcessing || isSubmittingOrder}
+                className="p-1.5 rounded-full hover:bg-gray-100 active:scale-95 transition-all"
+              >
+                <ChevronLeft size={20} className="text-gray-600" />
+              </button>
+            )}
+            <div>
+              <h2 className="text-base font-bold text-gray-900 leading-tight">
+                {currentStep === 1 ? "Delivery" : "Payment"}
+              </h2>
+              <p className="text-[11px] text-gray-400">Step {currentStep} of 2</p>
+            </div>
+          </div>
 
-          {currentStep === 1 ? (
-            /* ── Step 1: Delivery ── */
-            <div className="space-y-4 md:space-y-5">
-              {/* Phone */}
-              <div className="bg-gray-50 p-3 md:p-4 rounded-lg md:rounded-xl">
-                <label className="block text-xs md:text-sm font-medium mb-1.5 text-gray-700 flex items-center gap-1.5">
-                  <Phone size={14} className="text-red-500" /> Phone Number *
-                </label>
-                <input
-                  type="tel" required value={customerInfo.phone}
-                  onChange={(e) => setCustomerInfo((p: CustomerInfo) => ({ ...p, phone: e.target.value.replace(/[^0-9+\-\s()]/g, "") }))}
-                  className="w-full p-2.5 md:p-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white"
-                  placeholder="Enter your phone number"
-                  disabled={isProcessing || isSubmittingOrder}
-                  maxLength={11}
-                />
+          {/* Progress pills */}
+          <div className="flex items-center gap-1.5 mx-auto">
+            <div className="h-1.5 w-8 rounded-full bg-red-500" />
+            <div className={`h-1.5 w-8 rounded-full transition-colors ${currentStep === 2 ? "bg-red-500" : "bg-gray-200"}`} />
+          </div>
+
+          <button
+            onClick={() => setIsOpen(false)}
+            disabled={isProcessing || isSubmittingOrder}
+            className="p-1.5 rounded-full hover:bg-gray-100 active:scale-95 transition-all"
+          >
+            <X size={20} className="text-gray-400" />
+          </button>
+        </div>
+
+        {/* ── Scrollable body ── */}
+        <div className="flex-1 overflow-y-auto overscroll-contain">
+          <form onSubmit={handleSubmit} id="checkout-form">
+
+            {/* Order pill */}
+            <div className="mx-4 mt-4 bg-red-50 border border-red-100 rounded-2xl px-4 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ShoppingBag size={16} className="text-red-500" />
+                <span className="text-sm font-semibold text-gray-800">₦{grandTotal.toLocaleString()}</span>
               </div>
+              <span className="text-[10px] font-mono bg-white border border-red-200 text-red-600 px-2 py-1 rounded-full select-all">
+                {orderId}
+              </span>
+            </div>
 
-              {/* Delivery Options */}
-              <div className="bg-gray-50 p-3 md:p-4 rounded-lg md:rounded-xl">
-                <label className="block text-xs md:text-sm font-medium mb-2 md:mb-3 text-gray-700">Delivery Option *</label>
-                <div className="space-y-2 md:space-y-3">
-                  {[
-                    { value: "express", label: "Express Delivery", sub: "Within 1 hour to your location", price: "0", priceClass: "text-red-600" },
-                    { value: "pickup", label: "Pickup", sub: "Pick up at our store location", price: "Free", priceClass: "text-green-600" },
-                  ].map(({ value, label, sub, price, priceClass }) => (
-                    <label key={value} className="flex items-start p-2.5 md:p-3 border border-gray-300 rounded-lg hover:border-red-300 cursor-pointer">
-                      <input
-                        type="radio" name="deliveryOption" value={value}
-                        checked={customerInfo.deliveryOption === value}
-                        onChange={(e) => {
-                          setCustomerInfo((p: CustomerInfo) => ({
-                            ...p, deliveryOption: e.target.value as any,
-                            deliveryAddress: "", pickupLocation: "", isUIAddress: false,
-                          }));
-                          setDeliveryAreaError(""); setDeliveryLocationError("");
-                        }}
-                        className="h-4 w-4 mt-0.5 text-red-600 focus:ring-red-500"
-                        disabled={isProcessing || isSubmittingOrder}
-                      />
-                      <div className="ml-2 md:ml-3 flex-1">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm md:text-base font-medium text-gray-800">{label}</span>
-                          <span className={`text-xs md:text-sm font-semibold ${priceClass}`}>{price}</span>
-                        </div>
-                        <span className="text-xs text-gray-500">{sub}</span>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-                {estimatedDelivery && customerInfo.deliveryOption === "express" && (
-                  <p className="text-xs text-gray-600 mt-3 bg-red-50 p-2 rounded-md flex items-center gap-1.5">
-                    <Clock size={14} className="text-red-500" />
-                    <span className="font-medium">Estimated:</span> {estimatedDelivery}
-                  </p>
-                )}
-              </div>
+            <div className="px-4 py-4 space-y-4">
 
-              {/* Delivery Area */}
-              {isExpress && (
-                <div className="bg-gray-50 p-3 md:p-4 rounded-lg md:rounded-xl">
-                  <label className="block text-xs md:text-sm font-medium mb-1.5 text-gray-700 flex items-center gap-1.5">
-                    <MapPin size={14} className="text-red-500" /> Delivery Area *
-                  </label>
-                  <select
-                    value={customerInfo.deliveryAddress || ""}
-                    onChange={(e) => handleDeliveryAreaChange(e.target.value)}
-                    className="w-full p-2.5 md:p-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 text-gray-800 bg-white"
-                    disabled={isProcessing || isSubmittingOrder}
-                  >
-                    <option value="" disabled>Select a delivery area</option>
-                    {deliveryAreas.map((a) => <option key={a} value={a}>{a}</option>)}
-                  </select>
-                  {deliveryAreaError && <p className="text-xs text-red-600 mt-1.5">{deliveryAreaError}</p>}
-                </div>
-              )}
-
-              {/* Delivery Location */}
-              {isExpress && hasSelectedArea && (
-                <div className="bg-gray-50 p-3 md:p-4 rounded-lg md:rounded-xl">
-                  <label className="block text-xs md:text-sm font-medium mb-1.5 text-gray-700 flex items-center gap-1.5">
-                    <MapPin size={14} className="text-red-500" /> Delivery Location *
-                  </label>
-                  <select
-                    value={customerInfo.pickupLocation || ""}
-                    onChange={(e) => setCustomerInfo((p: CustomerInfo) => ({ ...p, pickupLocation: e.target.value }))}
-                    className="w-full p-2.5 md:p-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 text-gray-800 bg-white"
-                    disabled={isProcessing || isSubmittingOrder}
-                  >
-                    <option value="" disabled>Select location in {customerInfo.deliveryAddress}</option>
-                    {deliveryLocations.map((l) => <option key={l} value={l}>{l}</option>)}
-                  </select>
-                  {deliveryLocationError && <p className="text-xs text-red-600 mt-1.5">{deliveryLocationError}</p>}
-                  <p className="text-xs text-gray-500 mt-2">Our rider will deliver to this spot in {customerInfo.deliveryAddress}.</p>
-                </div>
-              )}
-
-              {/* Pickup info */}
-              {isPickup && (
-                <div className="bg-green-50 p-3 md:p-4 rounded-lg border border-green-200 flex items-start gap-2">
-                  <Store size={18} className="text-green-600 mt-0.5" />
+              {/* ════════ STEP 1 ════════ */}
+              {currentStep === 1 && (
+                <>
+                  {/* Phone */}
                   <div>
-                    <p className="text-sm text-gray-700">Pickup at: <span className="font-semibold">Indy Hall, University of Ibadan</span></p>
-                    <p className="text-xs text-gray-500 mt-1">*AM – 10 PM, Monday – Sunday</p>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                      Phone Number *
+                    </label>
+                    <div className="relative">
+                      <Phone size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                      <input
+                        type="tel"
+                        required
+                        value={customerInfo.phone}
+                        onChange={(e) => setCustomerInfo((p: CustomerInfo) => ({ ...p, phone: e.target.value.replace(/[^0-9+\-\s()]/g, "") }))}
+                        className="w-full pl-9 pr-4 py-3.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-400 focus:border-transparent bg-gray-50 text-gray-800 outline-none transition-all"
+                        placeholder="08012345678"
+                        disabled={isProcessing || isSubmittingOrder}
+                        maxLength={11}
+                      />
+                    </div>
                   </div>
-                </div>
+
+                  {/* Delivery Options */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                      Delivery Option *
+                    </label>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      {[
+                        {
+                          value: "express",
+                          label: "Express",
+                          sub: "~1 hour delivery",
+                          icon: <Clock size={18} className="text-red-500" />,
+                        },
+                        {
+                          value: "pickup",
+                          label: "Pickup",
+                          sub: "Collect in store",
+                          icon: <Store size={18} className="text-green-500" />,
+                        },
+                      ].map(({ value, label, sub, icon }) => {
+                        const selected = customerInfo.deliveryOption === value;
+                        return (
+                          <label
+                            key={value}
+                            className={`relative flex flex-col items-center gap-1.5 p-4 rounded-2xl border-2 cursor-pointer transition-all active:scale-[0.97] ${
+                              selected
+                                ? "border-red-500 bg-red-50"
+                                : "border-gray-200 bg-gray-50 hover:border-red-200"
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="deliveryOption"
+                              value={value}
+                              checked={selected}
+                              onChange={(e) => {
+                                setCustomerInfo((p: CustomerInfo) => ({
+                                  ...p,
+                                  deliveryOption: e.target.value as any,
+                                  deliveryAddress: "", pickupLocation: "", isUIAddress: false,
+                                }));
+                                setDeliveryAreaError("");
+                                setDeliveryLocationError("");
+                              }}
+                              className="sr-only"
+                              disabled={isProcessing || isSubmittingOrder}
+                            />
+                            {selected && (
+                              <div className="absolute top-2 right-2 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                                <Check size={10} className="text-white" />
+                              </div>
+                            )}
+                            {icon}
+                            <span className="text-sm font-bold text-gray-800">{label}</span>
+                            <span className="text-[11px] text-gray-500 text-center">{sub}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Estimated delivery badge */}
+                  {estimatedDelivery && isExpress && (
+                    <div className="flex items-center gap-2 text-xs bg-orange-50 text-orange-700 border border-orange-200 px-3 py-2 rounded-xl">
+                      <Clock size={13} className="flex-shrink-0" />
+                      <span><span className="font-semibold">Est. delivery:</span> {estimatedDelivery}</span>
+                    </div>
+                  )}
+
+                  {/* Delivery Area */}
+                  {isExpress && (
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                        Delivery Area *
+                      </label>
+                      <div className="relative">
+                        <MapPin size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none z-10" />
+                        <select
+                          value={customerInfo.deliveryAddress || ""}
+                          onChange={(e) => handleDeliveryAreaChange(e.target.value)}
+                          className="w-full pl-9 pr-4 py-3.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-400 bg-gray-50 text-gray-800 outline-none appearance-none transition-all"
+                          disabled={isProcessing || isSubmittingOrder}
+                        >
+                          <option value="" disabled>Select a delivery area</option>
+                          {deliveryAreas.map((a) => <option key={a} value={a}>{a}</option>)}
+                        </select>
+                        <ChevronRight size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 rotate-90 pointer-events-none" />
+                      </div>
+                      {deliveryAreaError && (
+                        <p className="text-xs text-red-500 mt-1.5 flex items-center gap-1">
+                          <AlertCircle size={11} /> {deliveryAreaError}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Delivery Location */}
+                  {isExpress && hasSelectedArea && (
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                        Drop-off Spot *
+                      </label>
+                      <div className="relative">
+                        <MapPin size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-red-400 pointer-events-none z-10" />
+                        <select
+                          value={customerInfo.pickupLocation || ""}
+                          onChange={(e) => setCustomerInfo((p: CustomerInfo) => ({ ...p, pickupLocation: e.target.value }))}
+                          className="w-full pl-9 pr-4 py-3.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-400 bg-gray-50 text-gray-800 outline-none appearance-none transition-all"
+                          disabled={isProcessing || isSubmittingOrder}
+                        >
+                          <option value="" disabled>Choose spot in {customerInfo.deliveryAddress}</option>
+                          {deliveryLocations.map((l) => <option key={l} value={l}>{l}</option>)}
+                        </select>
+                        <ChevronRight size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 rotate-90 pointer-events-none" />
+                      </div>
+                      {deliveryLocationError && (
+                        <p className="text-xs text-red-500 mt-1.5 flex items-center gap-1">
+                          <AlertCircle size={11} /> {deliveryLocationError}
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-400 mt-1.5">Our rider will meet you at this spot.</p>
+                    </div>
+                  )}
+
+                  {/* Pickup Info */}
+                  {isPickup && (
+                    <div className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-2xl px-4 py-3">
+                      <Store size={16} className="text-green-600 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">Indy Hall, University of Ibadan</p>
+                        <p className="text-xs text-gray-500 mt-0.5">*AM – 10 PM · Mon – Sun</p>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
-              <div className="flex justify-end pt-3">
-                <button
-                  type="button" onClick={() => { if (validateStep1()) setCurrentStep(2); }}
-                  disabled={isProcessing || isSubmittingOrder}
-                  className="w-full sm:w-auto bg-gradient-to-r from-red-600 to-red-500 text-white px-6 py-3 rounded-xl font-bold hover:from-red-700 hover:to-red-600 active:scale-[0.98] transition-all disabled:opacity-70 flex items-center justify-center gap-2 text-sm shadow-lg"
-                >
-                  Next: Payment Details <ChevronRight size={18} />
-                </button>
-              </div>
-            </div>
-          ) : (
-            /* ── Step 2: Payment ── */
-            <div className="space-y-4 md:space-y-5">
-              {/* Full Name */}
-              <div className="bg-gray-50 p-3 md:p-4 rounded-lg md:rounded-xl">
-                <label className="block text-xs md:text-sm font-medium mb-1.5 text-gray-700 flex items-center gap-1.5">
-                  <User size={14} className="text-red-500" /> Full Name *
-                </label>
-                <input
-                  type="text" required value={customerInfo.name}
-                  onChange={(e) => setCustomerInfo((p: CustomerInfo) => ({ ...p, name: e.target.value }))}
-                  className="w-full p-2.5 md:p-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white"
-                  placeholder="Enter your full name"
-                  disabled={isProcessing || isSubmittingOrder}
-                />
-              </div>
-
-              {/* Email */}
-              <div className="bg-gray-50 p-3 md:p-4 rounded-lg md:rounded-xl">
-                <label className="block text-xs md:text-sm font-medium mb-1.5 text-gray-700 flex items-center gap-1.5">
-                  <User size={14} className="text-red-500" /> Email Address *
-                </label>
-                <input
-                  type="email" required value={customerInfo.email}
-                  onChange={(e) => setCustomerInfo((p: CustomerInfo) => ({ ...p, email: e.target.value }))}
-                  className="w-full p-2.5 md:p-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white"
-                  placeholder="Enter your email address"
-                  disabled={isProcessing || isSubmittingOrder}
-                />
-              </div>
-
-              {/* Bank Details Banner */}
-              <div className="bg-amber-50 border border-amber-200 p-3 md:p-4 rounded-xl">
-                <p className="text-xs md:text-sm font-bold text-amber-800 mb-1.5 flex items-center gap-1.5">
-                  <CreditCard size={15} className="text-amber-600" />
-                  Transfer to this account first:
-                </p>
-                <div className="space-y-0.5">
-                  <p className="text-xs text-amber-700"><span className="font-semibold">Bank:</span> Moniepoint</p>
-                  <p className="text-xs text-amber-700"><span className="font-semibold">Account Name:</span> Ollan Essentials</p>
-                  <p className="text-xs text-amber-700"><span className="font-semibold">Account Number:</span>5235008468</p>
-                  <p className="text-xs text-amber-600 mt-1">Amount: <span className="font-bold">₦{grandTotal.toLocaleString()}</span></p>
-                </div>
-              </div>
-
-              {/* Payment Mode Toggle */}
-              <div className="bg-gray-50 p-3 md:p-4 rounded-lg md:rounded-xl">
-                <p className="text-xs md:text-sm font-medium text-gray-700 mb-2">After paying, verify with:</p>
-                <div className="flex gap-2">
-                  {(["screenshot", "manual"] as const).map((mode) => (
-                    <button
-                      key={mode} type="button"
-                      onClick={() => {
-                        setPaymentMode(mode);
-                        if (mode === "manual") clearScreenshot();
-                        if (mode === "screenshot")
-                          setCustomerInfo((p: CustomerInfo) => ({ ...p, transactionNumber: "" }));
-                      }}
-                      className={`flex-1 py-2 px-3 rounded-lg text-xs md:text-sm font-medium border transition-all ${
-                        paymentMode === mode
-                          ? "bg-red-500 text-white border-red-500 shadow-sm"
-                          : "bg-white text-gray-600 border-gray-300 hover:border-red-300"
-                      }`}
-                    >
-                      {mode === "screenshot" ? "📸 Upload Screenshot" : "✍️ Enter Txn Number"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Screenshot Upload */}
-              {paymentMode === "screenshot" && (
-                <div className="bg-gray-50 p-3 md:p-4 rounded-lg md:rounded-xl">
-                  <label className="block text-xs md:text-sm font-medium mb-2 text-gray-700 flex items-center gap-1.5">
-                    <ImageIcon size={14} className="text-red-500" /> Payment Screenshot *
-                  </label>
-
-                  {!screenshotPreview ? (
-                    <div
-                      onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-                      onDragLeave={() => setIsDragging(false)}
-                      onDrop={handleDrop}
-                      onClick={() => screenshotInputRef.current?.click()}
-                      className={`relative border-2 border-dashed rounded-xl p-6 md:p-8 text-center cursor-pointer transition-all ${
-                        isDragging ? "border-red-400 bg-red-50 scale-[1.02]" : "border-gray-300 hover:border-red-300 hover:bg-red-50/30"
-                      }`}
-                    >
-                      <div className="flex flex-col items-center gap-2">
-                        <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isDragging ? "bg-red-100" : "bg-gray-100"}`}>
-                          <Upload size={22} className={isDragging ? "text-red-500" : "text-gray-400"} />
-                        </div>
-                        <p className="text-sm font-medium text-gray-700">
-                          {isDragging ? "Drop it here!" : "Upload payment screenshot"}
-                        </p>
-                        <p className="text-xs text-gray-500">Drag & drop or click to browse · PNG, JPG up to 5 MB</p>
-                      </div>
+              {/* ════════ STEP 2 ════════ */}
+              {currentStep === 2 && (
+                <>
+                  {/* Full Name */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                      Full Name *
+                    </label>
+                    <div className="relative">
+                      <User size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                       <input
-                        ref={screenshotInputRef} type="file" accept="image/*" className="hidden"
-                        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleScreenshotFile(f); }}
+                        type="text"
+                        required
+                        value={customerInfo.name}
+                        onChange={(e) => setCustomerInfo((p: CustomerInfo) => ({ ...p, name: e.target.value }))}
+                        className="w-full pl-9 pr-4 py-3.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-400 focus:border-transparent bg-gray-50 text-gray-800 outline-none transition-all"
+                        placeholder="Enter your full name"
                         disabled={isProcessing || isSubmittingOrder}
                       />
                     </div>
-                  ) : (
-                    <div className="relative rounded-xl overflow-hidden border-2 border-green-300 bg-green-50">
-                      <img src={screenshotPreview} alt="Payment proof" className="w-full max-h-52 object-contain" />
-                      <div className="flex items-center justify-between p-2 bg-white border-t border-green-200">
-                        <div className="flex items-center gap-1.5">
-                          <CheckCircle size={14} className="text-green-600" />
-                          <span className="text-xs text-green-700 font-medium">Screenshot uploaded</span>
-                        </div>
-                        <button type="button" onClick={clearScreenshot}
-                          className="text-xs text-red-500 hover:text-red-700 underline"
-                          disabled={isProcessing || isSubmittingOrder}>
-                          Remove
+                  </div>
+
+                  {/* Email */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                      Email Address *
+                    </label>
+                    <div className="relative">
+                      <User size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                      <input
+                        type="email"
+                        required
+                        value={customerInfo.email}
+                        onChange={(e) => setCustomerInfo((p: CustomerInfo) => ({ ...p, email: e.target.value }))}
+                        className="w-full pl-9 pr-4 py-3.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-400 focus:border-transparent bg-gray-50 text-gray-800 outline-none transition-all"
+                        placeholder="you@example.com"
+                        disabled={isProcessing || isSubmittingOrder}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Bank Details — copyable */}
+                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <CreditCard size={15} className="text-amber-600" />
+                      <p className="text-xs font-bold text-amber-800 uppercase tracking-wider">Transfer to this account</p>
+                    </div>
+                    <div className="space-y-2">
+                      <CopyField label="Bank" value="Moniepoint" />
+                      <CopyField label="Account Name" value="Ollan Essentials" />
+                      <CopyField label="Account Number" value="5235008468" highlight />
+                      <div className="pt-1 flex items-center justify-between">
+                        <span className="text-xs text-amber-700">Amount to transfer:</span>
+                        <span className="text-base font-black text-amber-900">₦{grandTotal.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Payment Mode Toggle */}
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">After paying, confirm with</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(["screenshot", "manual"] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => {
+                            setPaymentMode(mode);
+                            if (mode === "manual") clearScreenshot();
+                            if (mode === "screenshot")
+                              setCustomerInfo((p: CustomerInfo) => ({ ...p, transactionNumber: "" }));
+                          }}
+                          className={`py-3 px-2 rounded-xl text-xs font-semibold border-2 transition-all active:scale-[0.97] ${
+                            paymentMode === mode
+                              ? "bg-red-500 text-white border-red-500"
+                              : "bg-gray-50 text-gray-600 border-gray-200 hover:border-red-200"
+                          }`}
+                        >
+                          {mode === "screenshot" ? "📸 Upload Screenshot" : "✍️ Enter Txn No."}
                         </button>
-                      </div>
-                      <div className="px-2 pb-2 bg-white">
-                        <p className="text-[10px] text-gray-400">
-                          Ref: <span className="font-mono text-gray-600">{customerInfo.transactionNumber}</span>
-                        </p>
-                      </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Screenshot Upload */}
+                  {paymentMode === "screenshot" && (
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                        Payment Screenshot *
+                      </label>
+
+                      {!screenshotPreview ? (
+                        <div
+                          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                          onDragLeave={() => setIsDragging(false)}
+                          onDrop={handleDrop}
+                          onClick={() => screenshotInputRef.current?.click()}
+                          className={`border-2 border-dashed rounded-2xl p-7 text-center cursor-pointer transition-all active:scale-[0.98] ${
+                            isDragging ? "border-red-400 bg-red-50" : "border-gray-200 hover:border-red-300 bg-gray-50"
+                          }`}
+                        >
+                          <div className="flex flex-col items-center gap-2">
+                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isDragging ? "bg-red-100" : "bg-gray-100"}`}>
+                              <Upload size={22} className={isDragging ? "text-red-500" : "text-gray-400"} />
+                            </div>
+                            <p className="text-sm font-semibold text-gray-700">
+                              {isDragging ? "Drop it!" : "Upload screenshot"}
+                            </p>
+                            <p className="text-xs text-gray-400">Tap to browse · PNG, JPG · max 5 MB</p>
+                          </div>
+                          <input
+                            ref={screenshotInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleScreenshotFile(f); }}
+                            disabled={isProcessing || isSubmittingOrder}
+                          />
+                        </div>
+                      ) : (
+                        <div className="rounded-2xl overflow-hidden border-2 border-green-300">
+                          <img src={screenshotPreview} alt="Payment proof" className="w-full max-h-48 object-contain bg-gray-50" />
+                          <div className="flex items-center justify-between p-3 bg-white border-t border-green-100">
+                            <div className="flex items-center gap-1.5">
+                              <CheckCircle size={14} className="text-green-500" />
+                              <span className="text-xs text-green-700 font-semibold">Screenshot ready</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={clearScreenshot}
+                              className="text-xs text-red-500 hover:text-red-700 font-medium"
+                              disabled={isProcessing || isSubmittingOrder}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      <p className="text-[11px] text-gray-400 mt-2 flex items-start gap-1.5">
+                        <AlertCircle size={11} className="mt-0.5 flex-shrink-0 text-amber-400" />
+                        Screenshot will be sent to our team with ref <span className="font-mono font-medium text-gray-600">{orderId}</span>.
+                      </p>
                     </div>
                   )}
 
-                  <div className="mt-2.5 flex items-start gap-1.5 text-xs text-gray-500">
-                    <AlertCircle size={12} className="mt-0.5 flex-shrink-0 text-amber-500" />
-                    <span>
-                      Your screenshot will be emailed to our team with reference{" "}
-                      <span className="font-mono font-medium text-gray-700">{orderId}</span>.
-                      We'll confirm your order within minutes.
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Manual Txn Number */}
-              {paymentMode === "manual" && (
-                <div className="bg-gray-50 p-3 md:p-4 rounded-lg md:rounded-xl">
-                  <label className="block text-xs md:text-sm font-medium mb-1.5 text-gray-700 flex items-center gap-1.5">
-                    <CreditCard size={14} className="text-red-500" /> Bank Transaction Number *
-                  </label>
-                  <input
-                    type="text" required={paymentMode === "manual"}
-                    value={customerInfo.transactionNumber}
-                    onChange={(e) => setCustomerInfo((p: CustomerInfo) => ({ ...p, transactionNumber: e.target.value }))}
-                    className="w-full p-2.5 md:p-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-800 bg-white"
-                    placeholder="e.g. T250301XXXXXX"
-                    disabled={isProcessing || isSubmittingOrder}
-                  />
-                  <p className="text-xs text-gray-500 mt-1.5">Find this in your bank transfer confirmation SMS or app notification.</p>
-                </div>
-              )}
-
-              {/* Navigation */}
-              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-3 md:pt-4">
-                <button type="button" onClick={() => setCurrentStep(1)}
-                  disabled={isProcessing || isSubmittingOrder}
-                  className="w-full sm:flex-1 bg-gray-100 text-gray-700 px-4 py-3 rounded-xl font-bold hover:bg-gray-200 active:scale-[0.98] transition-all disabled:opacity-70 flex items-center justify-center gap-2 text-sm order-2 sm:order-1">
-                  <ChevronLeft size={18} /> Back
-                </button>
-                <button type="submit"
-                  disabled={
-                    isProcessing || isSubmittingOrder ||
-                    (isExpress && (!customerInfo.deliveryAddress || !customerInfo.pickupLocation)) ||
-                    (paymentMode === "screenshot" && !screenshotPreview)
-                  }
-                  className="w-full sm:flex-1 bg-gradient-to-r from-red-600 to-red-500 text-white py-3 rounded-xl font-bold hover:from-red-700 hover:to-red-600 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm shadow-lg order-1 sm:order-2">
-                  {isProcessing || isSubmittingOrder ? (
-                    <><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" /> Submitting...</>
-                  ) : (
-                    <><CreditCard size={18} /> Submit Order</>
+                  {/* Manual Txn Number */}
+                  {paymentMode === "manual" && (
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                        Bank Transaction Number *
+                      </label>
+                      <div className="relative">
+                        <CreditCard size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                        <input
+                          type="text"
+                          required={paymentMode === "manual"}
+                          value={customerInfo.transactionNumber}
+                          onChange={(e) => setCustomerInfo((p: CustomerInfo) => ({ ...p, transactionNumber: e.target.value }))}
+                          className="w-full pl-9 pr-4 py-3.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-400 focus:border-transparent bg-gray-50 text-gray-800 outline-none transition-all"
+                          placeholder="e.g. T250301XXXXXX"
+                          disabled={isProcessing || isSubmittingOrder}
+                        />
+                      </div>
+                      <p className="text-[11px] text-gray-400 mt-1.5">Find this in your bank SMS or app notification.</p>
+                    </div>
                   )}
-                </button>
-              </div>
-            </div>
-          )}
+                </>
+              )}
 
-          <p className="text-xs text-center text-gray-500 mt-4 md:mt-6">
-            Your personal data will be used to process your order and for other purposes described in our privacy policy.
+            </div>
+          </form>
+        </div>
+
+        {/* ── Sticky bottom CTA ── */}
+        <div className="px-4 pt-3 pb-5 border-t border-gray-100 bg-white">
+          {currentStep === 1 ? (
+            <button
+              type="button"
+              onClick={() => { if (validateStep1()) setCurrentStep(2); }}
+              disabled={isProcessing || isSubmittingOrder}
+              className="w-full bg-gradient-to-r from-red-600 to-red-500 text-white py-4 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-60 shadow-lg shadow-red-200"
+            >
+              Payment Details <ChevronRight size={18} />
+            </button>
+          ) : (
+            <button
+              type="submit"
+              form="checkout-form"
+              disabled={
+                isProcessing || isSubmittingOrder ||
+                (isExpress && (!customerInfo.deliveryAddress || !customerInfo.pickupLocation)) ||
+                (paymentMode === "screenshot" && !screenshotPreview)
+              }
+              className="w-full bg-gradient-to-r from-red-600 to-red-500 text-white py-4 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-red-200"
+            >
+              {isProcessing || isSubmittingOrder ? (
+                <><div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" /> Submitting...</>
+              ) : (
+                <><CheckCircle size={18} /> Confirm Order</>
+              )}
+            </button>
+          )}
+          <p className="text-[10px] text-center text-gray-400 mt-2">
+            Your data is used only to process this order.
           </p>
-        </form>
+        </div>
       </div>
     </div>
   );
