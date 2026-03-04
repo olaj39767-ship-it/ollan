@@ -284,7 +284,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const OrderSummary = () => {
     const feeText = !customerInfo.deliveryOption || customerInfo.deliveryOption === "nil" ? "N/A"
-      : customerInfo.deliveryOption === "express" ? "free" : "Free";
+      : customerInfo.deliveryOption === "express" ? "0" : "Free";
     return (
       <div className="bg-gradient-to-r from-red-50 to-orange-50 p-3 md:p-4 rounded-xl mb-4 md:mb-6 border border-red-100">
         <div className="flex items-center gap-2 mb-2 md:mb-3">
