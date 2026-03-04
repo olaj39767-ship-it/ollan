@@ -238,7 +238,7 @@ const Navbar: React.FC = () => {
 
                     {user.role === "admin" && (
                       <>
-                        <Link href="/admin/update-product" className="block py-2">
+                        <Link href="/admin/seller" className="block py-2">
                           Manage Products
                         </Link>
                         <Link href="/admin/add-product" className="block py-2">
