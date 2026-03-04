@@ -1120,7 +1120,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <div className="space-y-0.5">
                   <p className="text-xs text-amber-700"><span className="font-semibold">Bank:</span> Moniepoint</p>
                   <p className="text-xs text-amber-700"><span className="font-semibold">Account Name:</span> Ollan Essentials</p>
-                  <p className="text-xs text-amber-700"><span className="font-semibold">Account Number:</span> 6617900839</p>
+                  <p className="text-xs text-amber-700"><span className="font-semibold">Account Number:</span>5235008468</p>
                   <p className="text-xs text-amber-600 mt-1">Amount: <span className="font-bold">₦{grandTotal.toLocaleString()}</span></p>
                 </div>
               </div>
