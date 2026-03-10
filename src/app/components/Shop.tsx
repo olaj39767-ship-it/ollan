@@ -485,93 +485,113 @@ const PharmacyApp: React.FC = () => {
     }
   };
 
-  const submitOrder = async (customerInfo: CustomerInfo) => {
-    if (!user) {
-      setIsUnauthenticatedModalOpen(true);
-      return;
-    }
+const submitOrder = async (customerInfo: CustomerInfo) => {
+  if (!user) {
+    setIsUnauthenticatedModalOpen(true);
+    return;
+  }
 
-    if (!customerInfo.deliveryOption || !customerInfo.phone || (!customerInfo.deliveryAddress && customerInfo.deliveryOption !== "pickup") || (customerInfo.deliveryOption === "timeframe" && !customerInfo.timeSlot) || !customerInfo.transactionNumber) {
-      alert("Please complete all required checkout fields.");
-      return;
-    }
+  // Basic frontend validation (keep this)
+  if (
+    !customerInfo.deliveryOption ||
+    !customerInfo.phone ||
+    (!customerInfo.deliveryAddress && customerInfo.deliveryOption !== "pickup") ||
+    (customerInfo.deliveryOption === "timeframe" && !customerInfo.timeSlot) ||
+    !customerInfo.transactionNumber
+  ) {
+    alert("Please complete all required checkout fields.");
+    return;
+  }
 
-    setIsSubmittingOrder(true);
-    setIsProcessing(true);
+  setIsSubmittingOrder(true);
+  setIsProcessing(true);
 
-    let prescriptionUrl = "";
-    if (customerInfo.prescription) {
-      const formData = new FormData();
-      formData.append("prescription", customerInfo.prescription);
-      try {
-        const res = await fetch("https://ollanback.vercel.app/api/orders/upload-prescription", {
-          method: "POST",
-          body: formData,
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.message || "Failed to upload prescription");
-        }
-        prescriptionUrl = data.prescriptionUrl;
-      } catch (error: any) {
-        console.error("Prescription upload error:", error);
-        alert("Error uploading prescription: " + (error.message || "Unknown error"));
-        setIsSubmittingOrder(false);
-        setIsProcessing(false);
-        return;
-      }
-    }
-
-    const orderTime = new Date();
-    const estimatedDeliveryTime = calculateDeliveryTime(orderTime, customerInfo.deliveryOption, customerInfo.timeSlot);
-    setEstimatedDelivery(estimatedDeliveryTime);
-
-    const payload = {
-      customerInfo: {
-        ...customerInfo,
-        estimatedDelivery: estimatedDeliveryTime,
-      },
-      items: cart.map((item) => ({
-        productId: item.productId._id,
-        quantity: item.quantity,
-        price: item.productId.price,
-        bundleApplied: item.bundleApplied,
-        finalPrice: getProductBundleInfo(item.productId.name, item.quantity, item.productId.price).finalPrice
-      })),
-      cartTotal,
-      deliveryFee,
-      grandTotal,
-      totalSavings,
-      prescriptionUrl,
-    };
+  let prescriptionUrl = "";
+  if (customerInfo.prescription) {
+    const formData = new FormData();
+    formData.append("prescription", customerInfo.prescription);
 
     try {
-      const { data } = await api.post("/api/orders/create", payload);
-      console.log("Order created successfully:", data);
-      setOrderComplete(true);
-      cartDispatch({ type: "CLEAR_CART" });
-      setIsCheckoutOpen(false);
-      setCustomerInfo({
-        name: user?.name || "",
-        email: user?.email || "",
-        phone: "",
-        prescription: null,
-        deliveryOption: "",
-        pickupLocation: "",
-        deliveryAddress: "",
-        timeSlot: "",
-        isUIAddress: false,
-        transactionNumber: "",
+      const res = await fetch("https://ollanback.vercel.app/api/orders/upload-prescription", {
+        method: "POST",
+        body: formData,
       });
-      alert("Order submitted successfully! We will verify your bank transfer and contact you.");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to upload prescription");
+      prescriptionUrl = data.prescriptionUrl;
     } catch (error: any) {
-      console.error("Create order error:", error);
-      alert("Error creating order: " + (error.message || "Unknown error"));
-    } finally {
+      console.error("Prescription upload error:", error);
+      alert("Error uploading prescription: " + (error.message || "Unknown error"));
       setIsSubmittingOrder(false);
       setIsProcessing(false);
+      return;
     }
+  }
+
+  const orderTime = new Date();
+  const estimatedDeliveryTime = calculateDeliveryTime(
+    orderTime,
+    customerInfo.deliveryOption,
+    customerInfo.timeSlot
+  );
+  setEstimatedDelivery(estimatedDeliveryTime);
+
+  // ────────────────────────────────────────────────
+  // This is the slimmed-down payload — only essentials
+  // ────────────────────────────────────────────────
+  const payload = {
+    customerInfo: {
+      name: customerInfo.name?.trim() || user?.name || "",
+      email: customerInfo.email?.trim() || user?.email || "",
+      phone: customerInfo.phone.trim(),
+      deliveryOption: customerInfo.deliveryOption,
+      deliveryAddress: customerInfo.deliveryOption !== "pickup" ? customerInfo.deliveryAddress?.trim() || null : null,
+      pickupLocation: customerInfo.pickupLocation?.trim() || null,
+      timeSlot: customerInfo.timeSlot?.trim() || null,
+      transactionNumber: customerInfo.transactionNumber.trim(),
+      estimatedDelivery: estimatedDeliveryTime,
+    },
+    items: cart.map((item) => ({
+      productId: item.productId._id,
+      quantity: item.quantity,
+      // Optional: you can keep finalPrice temporarily during transition
+      // But best: remove it → let backend recalculate from DB
+      // finalPrice: item.finalPrice,
+    })),
+    prescriptionUrl,
   };
+
+  try {
+    const { data } = await api.post("/api/orders/create", payload);
+    console.log("Order created successfully:", data);
+
+    setOrderComplete(true);
+    cartDispatch({ type: "CLEAR_CART" });
+    setIsCheckoutOpen(false);
+
+    // Reset form
+    setCustomerInfo({
+      name: user?.name || "",
+      email: user?.email || "",
+      phone: "",
+      prescription: null,
+      deliveryOption: "",
+      pickupLocation: "",
+      deliveryAddress: "",
+      timeSlot: "",
+      isUIAddress: false,
+      transactionNumber: "",
+    });
+
+    alert("Order submitted successfully! We will verify your bank transfer and contact you.");
+  } catch (error: any) {
+    console.error("Create order error:", error);
+    alert("Error creating order: " + (error.message || "Unknown error"));
+  } finally {
+    setIsSubmittingOrder(false);
+    setIsProcessing(false);
+  }
+};
 
   const debounce = (func: (...args: any[]) => void, wait: number) => {
     let timeout: NodeJS.Timeout;
