@@ -289,8 +289,8 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       paymentScreenshot: customerInfo.paymentScreenshot ?? null,
     };
 
-    sendPaymentEmail(sanitized, grandTotal).catch(console.error);
-    await submitOrder(sanitized);
+   sendPaymentEmail(sanitized, grandTotal).catch(console.error);
+await submitOrder({ ...sanitized, cartItems: cart });
   };
 
   if (!isOpen) return null;
