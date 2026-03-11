@@ -169,7 +169,8 @@ const pharmacyCategories = [
   "Digestive Health",
   "Skin Care",
   "Baby Care",
-  "Sexual Health"
+  "Sexual Health",
+  "Vitamins and Supplements"
 ];
 
 const PharmacyApp: React.FC = () => {
@@ -1163,22 +1164,7 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
                 Upload Prescription
               </button>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {pharmacyCategories.map((category) => (
-                <button
-                  key={category}
-                  onClick={() => setSelectedCategory(category)}
-                  className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-                    selectedCategory === category
-                      ? "bg-gradient-to-r from-red-500 to-orange-500 text-white shadow-md"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
-                  disabled={isSubmittingOrder}
-                >
-                  {category}
-                </button>
-              ))}
-            </div>
+           
           </div>
         )}
 
