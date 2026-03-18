@@ -86,9 +86,9 @@ const cartReducer = (state: CartItem[], action: CartAction): CartItem[] => {
 
 // ─── Congo helpers ────────────────────────────────────────────────────────────
 const CONGO_KG_MAP: { keyword: string; kgPerCongo: number }[] = [
-  { keyword: "rice",  kgPerCongo: 1.5 },
-  { keyword: "garri", kgPerCongo: 1.3 },
-  { keyword: "beans", kgPerCongo: 1.5 },
+  { keyword: "rice",  kgPerCongo: 1.6 },
+  { keyword: "garri", kgPerCongo: 1.1 },
+  { keyword: "beans", kgPerCongo: 1.6 },
 ];
 
 const getCongoKg = (productName: string): number | null => {
