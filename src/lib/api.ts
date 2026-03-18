@@ -1,6 +1,6 @@
 // src/utils/api.ts
 // const baseURL: string = process.env.NEXT_PUBLIC_API_URL || "https://ollanbackend-jr1d3g.fly.dev";
-const baseURL: string = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const baseURL: string = process.env.NEXT_PUBLIC_API_URL || "https://ollanback.vercel.app";
 // const baseURL: string = process.env.NEXT_PUBLIC_API_URL || "https://ollanbackend-jr1d3g.fly.dev/";
 
 interface ApiError {
