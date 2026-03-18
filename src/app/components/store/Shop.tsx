@@ -240,25 +240,17 @@ const PharmacyApp: React.FC = () => {
     fetchProducts();
   }, []);
 
-  const calculateDeliveryTime = (orderTime: Date, deliveryOption: string, timeSlot: string): string => {
-    if (deliveryOption === "express") {
-      const expressTime = new Date(orderTime.getTime() + 60 * 60 * 1000);
-      return expressTime.toLocaleString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, day: "numeric", month: "short", year: "numeric" });
-    } else if (deliveryOption === "timeframe" && timeSlot) {
-      const currentDate = new Date(orderTime);
-      const [hour, period] = timeSlot.split(" ");
-      let hour24 = parseInt(hour);
-      if (period === "PM" && hour24 !== 12) hour24 += 12;
-      if (period === "AM" && hour24 === 12) hour24 = 0;
-      const slotTime = new Date(currentDate);
-      slotTime.setHours(hour24, 0, 0, 0);
-      if (slotTime <= orderTime) slotTime.setDate(slotTime.getDate() + 1);
-      return slotTime.toLocaleString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, day: "numeric", month: "short", year: "numeric" });
-    } else if (deliveryOption === "pickup") {
-      return "Pickup scheduled upon confirmation";
-    }
-    return "";
-  };
+const calculateDeliveryTime = (orderTime: Date, deliveryOption: string): string => {
+  if (deliveryOption === "express") {
+    const expressTime = new Date(orderTime.getTime() + 60 * 60 * 1000);
+    return expressTime.toLocaleString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, day: "numeric", month: "short", year: "numeric" });
+  } else if (deliveryOption === "timeframe") {
+    return "Delivery scheduled within your selected timeframe";
+  } else if (deliveryOption === "pickup") {
+    return "Pickup scheduled upon confirmation";
+  }
+  return "";
+};
 
   const filteredProducts = useMemo(() => {
     let result = products;
@@ -373,7 +365,7 @@ const PharmacyApp: React.FC = () => {
     }
 
     const orderTime = new Date();
-    const estimatedDeliveryTime = calculateDeliveryTime(orderTime, customerInfo.deliveryOption, customerInfo.timeSlot);
+const estimatedDeliveryTime = calculateDeliveryTime(orderTime, customerInfo.deliveryOption);
     setEstimatedDelivery(estimatedDeliveryTime);
 
     const payload = {
