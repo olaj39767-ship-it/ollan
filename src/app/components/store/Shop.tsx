@@ -4,21 +4,25 @@ import React, { useState, useRef, useEffect, useReducer, useCallback, useMemo } 
 import { ShoppingCart, Plus, Minus, X, Search, Home, ShoppingBag, Star, Truck, Shield, Clock, FileText, Loader2 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
-import logo from "../../../public/ollogo.svg";
-import { useAuth } from "../../context/AuthContext";
-import { Product } from "../../types";
+import logo from "../../../../public/ollogo.svg";
+import { useAuth } from "../../../context/AuthContext";
+import { Product } from "../../../types";
 
 import { useRouter } from "next/navigation";
 import api from "@/src/lib/api";
 import CheckoutModal from "./CheckoutModal";
-import SkeletonLoader from "./SkeletonLoader";
-import TestimonialSlider from "./Testimonialslider";
-import { StatsStrip } from "./StatsStrip";
-import UploadPrescriptionModal from "./UploadPrescriptionModal"; // Import the prescription modal
+import SkeletonLoader from "../SkeletonLoader";
+import TestimonialSlider from "../Testimonialslider";
+import { StatsStrip } from "../StatsStrip";
+import UploadPrescriptionModal from "../UploadPrescriptionModal";
 
 interface CartItem {
-  productId: Product;
+  productId: string;           // ← fixed: only ID (string)
+  name?: string;
+  price?: number;
+  image?: string;
   quantity: number;
+  unit?: "kg" | "congo";
   bundleApplied?: boolean;
   originalPrice?: number;
   finalPrice?: number;
@@ -37,14 +41,14 @@ type CartAction =
 const cartReducer = (state: CartItem[], action: CartAction): CartItem[] => {
   switch (action.type) {
     case "ADD_ITEM": {
-      if (!action.payload?.productId?._id) {
+      if (!action.payload?.productId) {
         console.warn("Attempted to add item with invalid productId:", action.payload);
         return state;
       }
-      const existingItem = state.find((item) => item?.productId?._id === action.payload.productId._id);
+      const existingItem = state.find((item) => item.productId === action.payload.productId);
       if (existingItem) {
         return state.map((item) =>
-          item?.productId?._id === action.payload.productId._id
+          item.productId === action.payload.productId
             ? { ...item, quantity: item.quantity + action.payload.quantity }
             : item
         );
@@ -52,26 +56,26 @@ const cartReducer = (state: CartItem[], action: CartAction): CartItem[] => {
       return [...state, action.payload];
     }
     case "REMOVE_ITEM": {
-      return state.filter((item) => item?.productId?._id !== action.payload);
+      return state.filter((item) => item.productId !== action.payload);
     }
     case "UPDATE_QUANTITY": {
       if (action.payload.quantity <= 0) {
-        return state.filter((item) => item?.productId?._id !== action.payload.id);
+        return state.filter((item) => item.productId !== action.payload.id);
       }
       return state.map((item) =>
-        item?.productId?._id === action.payload.id
+        item.productId === action.payload.id
           ? { ...item, quantity: action.payload.quantity }
           : item
       );
     }
     case "SET_CART": {
-      return action.payload.filter((item) => item?.productId?._id);
+      return action.payload.filter((item) => item.productId);
     }
     case "CLEAR_CART": {
       return [];
     }
     case "CLEANUP_CART": {
-      return state.filter((item) => item?.productId?._id);
+      return state.filter((item) => item.productId);
     }
     default: {
       const _exhaustiveCheck: never = action;
@@ -80,97 +84,85 @@ const cartReducer = (state: CartItem[], action: CartAction): CartItem[] => {
   }
 };
 
-// Helper function for bundle pricing
-const getProductBundleInfo = (productName: string, quantity: number, price: number) => {
-  const lowerName = productName.toLowerCase();
-  
-  // Check for eggs
-  if (lowerName.includes('egg')) {
-    if (quantity >= 3) {
-      const originalPrice = price * quantity;
-      const discount = originalPrice * 0.05; // 5% off
-      return {
-        hasBundle: true,
-        bundleName: "3 Eggs Bundle",
-        discountPercentage: 5,
-        originalPrice: originalPrice,
-        finalPrice: originalPrice - discount,
-        savedAmount: discount
-      };
-    }
+// ─── Congo helpers ────────────────────────────────────────────────────────────
+const CONGO_KG_MAP: { keyword: string; kgPerCongo: number }[] = [
+  { keyword: "rice",  kgPerCongo: 1.5 },
+  { keyword: "garri", kgPerCongo: 1.3 },
+  { keyword: "beans", kgPerCongo: 1.5 },
+];
+
+const getCongoKg = (productName: string): number | null => {
+  const lower = productName.toLowerCase();
+  for (const entry of CONGO_KG_MAP) {
+    if (lower.includes(entry.keyword)) return entry.kgPerCongo;
   }
-  
-  // Check for noodles
-  if (lowerName.includes('noodle')) {
-    if (quantity >= 3) {
-      const originalPrice = price * quantity;
-      const discount = originalPrice * 0.05; // 5% off
-      return {
-        hasBundle: true,
-        bundleName: "3 Noodles Bundle",
-        discountPercentage: 5,
-        originalPrice: originalPrice,
-        finalPrice: originalPrice - discount,
-        savedAmount: discount
-      };
-    }
-  }
-  
-  // Check for sachet tomato
-  if (lowerName.includes('tomato') && (lowerName.includes('sachet') || lowerName.includes('satchet'))) {
-    if (quantity >= 10) {
-      const originalPrice = price * quantity;
-      const discount = originalPrice * 0.05; // 5% off
-      return {
-        hasBundle: true,
-        bundleName: "10 Sachet Tomatoes Bundle",
-        discountPercentage: 5,
-        originalPrice: originalPrice,
-        finalPrice: originalPrice - discount,
-        savedAmount: discount
-      };
-    }
-  }
-  
-  return {
-    hasBundle: false,
-    bundleName: "",
-    discountPercentage: 0,
-    originalPrice: price * quantity,
-    finalPrice: price * quantity,
-    savedAmount: 0
-  };
+  return null;
 };
 
-// In PharmacyApp.tsx, update the CustomerInfo interface:
+const congoPriceFromKgPrice = (pricePerKg: number, kgPerCongo: number): number =>
+  pricePerKg * kgPerCongo;
 
-interface CustomerInfo {
+// ─── Signed-in user discount ──────────────────────────────────────────────────
+const SIGNED_IN_DISCOUNT = 0;
+
+const applyUserDiscount = (price: number, isSignedIn: boolean): number => {
+  if (!isSignedIn || SIGNED_IN_DISCOUNT === 0) return price;
+  return price * (1 - SIGNED_IN_DISCOUNT);
+};
+
+// ─── Bundle pricing ───────────────────────────────────────────────────────────
+const getProductBundleInfo = (productName: string, quantity: number, price: number) => {
+  const lowerName = productName.toLowerCase();
+
+  if (lowerName.includes("egg")) {
+    if (quantity >= 3) {
+      const originalPrice = price * quantity;
+      const discount = originalPrice * 0.05;
+      return { hasBundle: true, bundleName: "3 Eggs Bundle", discountPercentage: 5, originalPrice, finalPrice: originalPrice - discount, savedAmount: discount };
+    }
+  }
+
+  if (lowerName.includes("noodle")) {
+    if (quantity >= 3) {
+      const originalPrice = price * quantity;
+      const discount = originalPrice * 0.05;
+      return { hasBundle: true, bundleName: "3 Noodles Bundle", discountPercentage: 5, originalPrice, finalPrice: originalPrice - discount, savedAmount: discount };
+    }
+  }
+
+  if (lowerName.includes("tomato") && (lowerName.includes("sachet") || lowerName.includes("satchet"))) {
+    if (quantity >= 10) {
+      const originalPrice = price * quantity;
+      const discount = originalPrice * 0.05;
+      return { hasBundle: true, bundleName: "10 Sachet Tomatoes Bundle", discountPercentage: 5, originalPrice, finalPrice: originalPrice - discount, savedAmount: discount };
+    }
+  }
+
+  return { hasBundle: false, bundleName: "", discountPercentage: 0, originalPrice: price * quantity, finalPrice: price * quantity, savedAmount: 0 };
+};
+
+export interface CustomerInfo {
   name: string;
   email: string;
   phone: string;
   prescription?: File | null;
-  deliveryOption: "express" | "timeframe" | "pickup" | "" | "nil"; // Make sure "pickup" is included
+  deliveryOption: "express" | "timeframe" | "pickup" | "" | "nil";
   pickupLocation: string;
   deliveryAddress: string;
-  timeSlot: "12 PM" | "4 PM" | "9 PM" | "6 AM" | "" | "nil";
+  timeSlot?: "12 PM" | "4 PM" | "9 PM" | "6 AM" | "" | "nil";
   isUIAddress: boolean;
   transactionNumber: string;
+  orderId?: string;
+  paymentScreenshot?: File | null;
+  // Add any other fields you use (discountCode, etc.)
+  [key: string]: any; // if you really need dynamic keys
 }
 
-const supermarketCategories = [
-  "All Products",
-  "Supermarket"
-];
+const supermarketCategories = ["All Products", "Supermarket"];
 
 const pharmacyCategories = [
-  "Pain Reliever",
-  "Anti Malaria",
-  "Cough and Cold",
-  "Digestive Health",
-  "Skin Care",
-  "Baby Care",
-  "Sexual Health",
-  "Vitamins and Supplements"
+  "Pain Reliever", "Anti Malaria", "Cough and Cold", "Digestive Health",
+  "Skin Care", "Baby Care", "Sexual Health", "Vitamins and Supplements",
 ];
 
 const PharmacyApp: React.FC = () => {
@@ -184,17 +176,11 @@ const PharmacyApp: React.FC = () => {
   const [isQuantityModalOpen, setIsQuantityModalOpen] = useState<boolean>(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [quantity, setQuantity] = useState<number>(1);
+  const [selectedUnit, setSelectedUnit] = useState<"kg" | "congo">("kg");
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo>({
-    name: "",
-    email: "",
-    phone: "",
-    prescription: null,
-    deliveryOption: "",
-    pickupLocation: "",
-    deliveryAddress: "",
-    timeSlot: "",
-    isUIAddress: false,
-    transactionNumber: "",
+    name: "", email: "", phone: "", prescription: null,
+    deliveryOption: "", pickupLocation: "", deliveryAddress: "",
+    timeSlot: "", isUIAddress: false, transactionNumber: "",
   });
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [orderComplete, setOrderComplete] = useState<boolean>(false);
@@ -202,90 +188,21 @@ const PharmacyApp: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>(["All Products"]);
-  const [isUnauthenticatedModalOpen, setIsUnauthenticatedModalOpen] = useState<boolean>(false);
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
-  
-  // Loading states for buttons
+  const [loadingProducts, setLoadingProducts] = useState<boolean>(true);
+
   const [isAddingToCart, setIsAddingToCart] = useState<boolean>(false);
   const [isRemovingFromCart, setIsRemovingFromCart] = useState<string | null>(null);
   const [isUpdatingQuantity, setIsUpdatingQuantity] = useState<string | null>(null);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState<boolean>(false);
-  
-  // State for prescription upload modal
+
   const [isPrescriptionModalOpen, setIsPrescriptionModalOpen] = useState<boolean>(false);
 
-  const UnauthenticatedModal = () => {
-    const modalRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-      const handleClickOutside = (event: MouseEvent) => {
-        if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
-          setIsUnauthenticatedModalOpen(false);
-        }
-      };
-
-      if (isUnauthenticatedModalOpen) {
-        document.addEventListener("mousedown", handleClickOutside);
-        document.body.style.overflow = "hidden";
-      }
-
-      return () => {
-        document.removeEventListener("mousedown", handleClickOutside);
-        document.body.style.overflow = "unset";
-      };
-    }, [isUnauthenticatedModalOpen]);
-
-    if (!isUnauthenticatedModalOpen) return null;
-
-    return (
-      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-        <div ref={modalRef} className="bg-white rounded-2xl max-w-md w-full p-8 shadow-2xl">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Sign In Required</h2>
-            <button
-              onClick={() => setIsUnauthenticatedModalOpen(false)}
-              className="p-2 hover:bg-gray-100 rounded-full active:scale-95 transition-transform duration-200"
-              aria-label="Close modal"
-            >
-              <X size={24} className="text-red-500" />
-            </button>
-          </div>
-          <div className="bg-gradient-to-br from-red-50 to-orange-50 rounded-xl p-6 mb-6">
-            <p className="text-gray-700 text-lg text-center">
-              Please sign in to add items to your cart and proceed with your purchase.
-            </p>
-          </div>
-          <div className="flex justify-between space-x-4">
-            <button
-              onClick={() => setIsUnauthenticatedModalOpen(false)}
-              className="flex-1 bg-gradient-to-r from-gray-100 to-gray-200 text-gray-900 py-3.5 rounded-xl font-semibold hover:from-gray-200 hover:to-gray-300 active:scale-[0.98] transition-all duration-200 shadow-sm"
-              aria-label="Go back"
-            >
-              Back
-            </button>
-            <button
-              onClick={() => {
-                setIsUnauthenticatedModalOpen(false);
-                router.push("/pages/signin");
-              }}
-              className="flex-1 bg-gradient-to-r from-red-500 to-orange-500 text-white py-3.5 rounded-xl font-semibold hover:from-red-600 hover:to-orange-600 active:scale-[0.98] transition-all duration-200 shadow-lg shadow-red-500/25"
-              aria-label="Sign in now"
-            >
-              Sign In Now
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
+  // ─── Open quantity modal ────────────────────────────────────────
   const openQuantityModal = (product: Product) => {
-    if (!user) {
-      setIsUnauthenticatedModalOpen(true);
-      return;
-    }
     setSelectedProduct(product);
     setQuantity(1);
+    setSelectedUnit("kg");
     setIsQuantityModalOpen(true);
   };
 
@@ -299,26 +216,25 @@ const PharmacyApp: React.FC = () => {
 
   useEffect(() => {
     const fetchProducts = async () => {
+      setLoadingProducts(true);
       try {
         const { data }: { data: Product[] } = await api.get("/api/products");
         setProducts(data);
 
-        const supermarketCategoriesSet = new Set<string>(
+        const supermarketSet = new Set(
           data
-            .filter((product) => supermarketCategories.includes(product.category || ""))
-            .map((product) => product.category!)
+            .filter((p) => supermarketCategories.includes(p.category || ""))
+            .map((p) => p.category!)
         );
-        
-        const uniqueCategories = ["All Products", ...Array.from(supermarketCategoriesSet)];
-        setCategories(uniqueCategories);
+        setCategories(["All Products", ...Array.from(supermarketSet)]);
 
-        // Set featured products (top 4)
-        const featured = data
-          .filter(p => p.category && supermarketCategories.includes(p.category))
-          .slice(0, 4);
-        setFeaturedProducts(featured);
+        setFeaturedProducts(
+          data.filter((p) => p.category && supermarketCategories.includes(p.category)).slice(0, 4)
+        );
       } catch (error: any) {
         console.error("Error fetching products:", error.message || "Unknown error");
+      } finally {
+        setLoadingProducts(false);
       }
     };
     fetchProducts();
@@ -327,36 +243,17 @@ const PharmacyApp: React.FC = () => {
   const calculateDeliveryTime = (orderTime: Date, deliveryOption: string, timeSlot: string): string => {
     if (deliveryOption === "express") {
       const expressTime = new Date(orderTime.getTime() + 60 * 60 * 1000);
-      return expressTime.toLocaleString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      });
+      return expressTime.toLocaleString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, day: "numeric", month: "short", year: "numeric" });
     } else if (deliveryOption === "timeframe" && timeSlot) {
       const currentDate = new Date(orderTime);
       const [hour, period] = timeSlot.split(" ");
       let hour24 = parseInt(hour);
       if (period === "PM" && hour24 !== 12) hour24 += 12;
       if (period === "AM" && hour24 === 12) hour24 = 0;
-
       const slotTime = new Date(currentDate);
       slotTime.setHours(hour24, 0, 0, 0);
-
-      if (slotTime <= orderTime) {
-        slotTime.setDate(slotTime.getDate() + 1);
-      }
-
-      return slotTime.toLocaleString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      });
+      if (slotTime <= orderTime) slotTime.setDate(slotTime.getDate() + 1);
+      return slotTime.toLocaleString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, day: "numeric", month: "short", year: "numeric" });
     } else if (deliveryOption === "pickup") {
       return "Pickup scheduled upon confirmation";
     }
@@ -365,83 +262,71 @@ const PharmacyApp: React.FC = () => {
 
   const filteredProducts = useMemo(() => {
     let result = products;
-
     if (viewMode === "Supermarket") {
-      result = products.filter(
-        (product) => product.category && supermarketCategories.includes(product.category)
-      );
+      result = products.filter((p) => p.category && supermarketCategories.includes(p.category));
     } else {
-      result = products.filter(
-        (product) => product.category && pharmacyCategories.includes(product.category)
-      );
+      result = products.filter((p) => p.category && pharmacyCategories.includes(p.category));
     }
-
     if (selectedCategory !== "All Products" && selectedCategory !== "All Category") {
-      result = result.filter((product) => product.category === selectedCategory);
+      result = result.filter((p) => p.category === selectedCategory);
     }
-
     return result;
   }, [products, viewMode, selectedCategory]);
 
   const searchedProducts = useMemo(() => {
     return searchQuery
-      ? filteredProducts.filter((product) =>
-          product.name.toLowerCase().includes(searchQuery.toLowerCase())
-        )
+      ? filteredProducts.filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
       : filteredProducts;
   }, [filteredProducts, searchQuery]);
 
   const cartTotal = cart.reduce((total, item) => {
-    const bundleInfo = getProductBundleInfo(item.productId.name, item.quantity, item.productId.price);
-    return total + bundleInfo.finalPrice;
+    const bundleInfo = getProductBundleInfo(item.name || "", item.quantity, item.price || 0);
+    return total + (bundleInfo.finalPrice || 0);
   }, 0);
 
   const totalSavings = cart.reduce((total, item) => {
-    const bundleInfo = getProductBundleInfo(item.productId.name, item.quantity, item.productId.price);
-    return total + bundleInfo.savedAmount;
+    const bundleInfo = getProductBundleInfo(item.name || "", item.quantity, item.price || 0);
+    return total + (bundleInfo.savedAmount || 0);
   }, 0);
 
-  const deliveryFee = cartTotal > 0
-    ? customerInfo.deliveryOption === "express"
-      ? 0
-      : customerInfo.deliveryOption === "timeframe" && cartTotal < 5000
-      ? 0
-      : 0
-    : 0;
-  const grandTotal = cartTotal ;
+  const deliveryFee = 0;
+  const grandTotal = cartTotal;
 
+  // ─── Add to cart ────────────────────────────────────────────────
   const handleAddToCart = async () => {
     if (!selectedProduct || quantity <= 0 || isAddingToCart) return;
-    
     setIsAddingToCart(true);
-    
+
     try {
-      const bundleInfo = getProductBundleInfo(selectedProduct.name, quantity, selectedProduct.price);
-      
-      const { data } = await api.post("/api/cart/add", {
-        productId: selectedProduct._id,
-        quantity,
-        bundleApplied: bundleInfo.hasBundle,
-        originalPrice: bundleInfo.originalPrice,
-        finalPrice: bundleInfo.finalPrice,
-        discount: bundleInfo.savedAmount
-      });
-      
+      const congoKg = getCongoKg(selectedProduct.name);
+      const effectiveUnitPrice =
+        selectedUnit === "congo" && congoKg !== null
+          ? congoPriceFromKgPrice(selectedProduct.price, congoKg)
+          : selectedProduct.price;
+
+      const bundleInfo = getProductBundleInfo(selectedProduct.name, quantity, effectiveUnitPrice);
+      const discountedFinal = applyUserDiscount(bundleInfo.finalPrice, !!user);
+
       cartDispatch({
         type: "ADD_ITEM",
-        payload: { 
-          productId: selectedProduct, 
+        payload: {
+          productId: selectedProduct._id,
+          name: selectedProduct.name,
+          price: effectiveUnitPrice,
+          image: selectedProduct.image,
           quantity,
+          unit: selectedUnit,
           bundleApplied: bundleInfo.hasBundle,
           originalPrice: bundleInfo.originalPrice,
-          finalPrice: bundleInfo.finalPrice,
-          discount: bundleInfo.savedAmount
+          finalPrice: discountedFinal,
+          discount: bundleInfo.savedAmount,
         },
       });
-      
+
       setIsQuantityModalOpen(false);
       setSelectedProduct(null);
       setQuantity(1);
+      setSelectedUnit("kg");
     } catch (error: any) {
       alert("Error: " + (error.message || "Failed to add to cart"));
     } finally {
@@ -449,150 +334,86 @@ const PharmacyApp: React.FC = () => {
     }
   };
 
-  const handleRemoveFromCart = async (productId: string) => {
-    if (isRemovingFromCart === productId) return;
-    
-    setIsRemovingFromCart(productId);
-    
-    try {
-      const { data } = await api.delete(`/api/cart/remove/${productId}`);
-      cartDispatch({ type: "REMOVE_ITEM", payload: productId });
-    } catch (error: any) {
-      alert("Error: " + (error.message || "Failed to remove item"));
-    } finally {
-      setIsRemovingFromCart(null);
-    }
+  const handleRemoveFromCart = (productId: string) => {
+    cartDispatch({ type: "REMOVE_ITEM", payload: productId });
   };
 
-  const handleUpdateQuantity = async (productId: string, newQuantity: number) => {
-    if (isUpdatingQuantity === productId) return;
-    
-    setIsUpdatingQuantity(productId);
-    
-    try {
-      // Optimistic update
-      cartDispatch({
-        type: "UPDATE_QUANTITY",
-        payload: { id: productId, quantity: newQuantity },
-      });
-      
-      // API call would go here if needed
-      // await api.put(`/api/cart/update/${productId}`, { quantity: newQuantity });
-      
-    } catch (error: any) {
-      alert("Error: " + (error.message || "Failed to update quantity"));
-    } finally {
-      setIsUpdatingQuantity(null);
-    }
+  const handleUpdateQuantity = (productId: string, newQuantity: number) => {
+    cartDispatch({ type: "UPDATE_QUANTITY", payload: { id: productId, quantity: newQuantity } });
   };
 
-const submitOrder = async (customerInfo: CustomerInfo) => {
-  if (!user) {
-    setIsUnauthenticatedModalOpen(true);
-    return;
-  }
-
-  // Basic frontend validation (keep this)
-  if (
-    !customerInfo.deliveryOption ||
-    !customerInfo.phone ||
-    (!customerInfo.deliveryAddress && customerInfo.deliveryOption !== "pickup") ||
-    (customerInfo.deliveryOption === "timeframe" && !customerInfo.timeSlot) ||
-    !customerInfo.transactionNumber
-  ) {
-    alert("Please complete all required checkout fields.");
-    return;
-  }
-
-  setIsSubmittingOrder(true);
-  setIsProcessing(true);
-
-  let prescriptionUrl = "";
-  if (customerInfo.prescription) {
-    const formData = new FormData();
-    formData.append("prescription", customerInfo.prescription);
-
-    try {
-      const res = await fetch("https://ollanback.vercel.app/api/orders/upload-prescription", {
-        method: "POST",
-        body: formData,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to upload prescription");
-      prescriptionUrl = data.prescriptionUrl;
-    } catch (error: any) {
-      console.error("Prescription upload error:", error);
-      alert("Error uploading prescription: " + (error.message || "Unknown error"));
-      setIsSubmittingOrder(false);
-      setIsProcessing(false);
+  const submitOrder = async (customerInfo: CustomerInfo) => {
+    if (
+      !customerInfo.deliveryOption ||
+      !customerInfo.phone ||
+      (!customerInfo.deliveryAddress && customerInfo.deliveryOption !== "pickup") ||
+      (customerInfo.deliveryOption === "timeframe" && !customerInfo.timeSlot) ||
+      !customerInfo.transactionNumber
+    ) {
+      alert("Please complete all required checkout fields.");
       return;
     }
-  }
 
-  const orderTime = new Date();
-  const estimatedDeliveryTime = calculateDeliveryTime(
-    orderTime,
-    customerInfo.deliveryOption,
-    customerInfo.timeSlot
-  );
-  setEstimatedDelivery(estimatedDeliveryTime);
+    setIsSubmittingOrder(true);
+    setIsProcessing(true);
 
-  // ────────────────────────────────────────────────
-  // This is the slimmed-down payload — only essentials
-  // ────────────────────────────────────────────────
-  const payload = {
-    customerInfo: {
-      name: customerInfo.name?.trim() || user?.name || "",
-      email: customerInfo.email?.trim() || user?.email || "",
-      phone: customerInfo.phone.trim(),
-      deliveryOption: customerInfo.deliveryOption,
-      deliveryAddress: customerInfo.deliveryOption !== "pickup" ? customerInfo.deliveryAddress?.trim() || null : null,
-      pickupLocation: customerInfo.pickupLocation?.trim() || null,
-      timeSlot: customerInfo.timeSlot?.trim() || null,
-      transactionNumber: customerInfo.transactionNumber.trim(),
-      estimatedDelivery: estimatedDeliveryTime,
-    },
-    items: cart.map((item) => ({
-      productId: item.productId._id,
-      quantity: item.quantity,
-      // Optional: you can keep finalPrice temporarily during transition
-      // But best: remove it → let backend recalculate from DB
-      // finalPrice: item.finalPrice,
-    })),
-    prescriptionUrl,
+    let prescriptionUrl = "";
+    if (customerInfo.prescription) {
+      const formData = new FormData();
+      formData.append("prescription", customerInfo.prescription);
+      try {
+        const res = await api.post("/api/orders/upload-prescription", formData);
+        prescriptionUrl = res.data.prescriptionUrl;
+      } catch (error: any) {
+        alert("Error uploading prescription: " + (error.message || "Unknown error"));
+        setIsSubmittingOrder(false);
+        setIsProcessing(false);
+        return;
+      }
+    }
+
+    const orderTime = new Date();
+    const estimatedDeliveryTime = calculateDeliveryTime(orderTime, customerInfo.deliveryOption, customerInfo.timeSlot);
+    setEstimatedDelivery(estimatedDeliveryTime);
+
+    const payload = {
+      customerInfo: {
+        name: customerInfo.name?.trim() || user?.name || "Guest",
+        email: customerInfo.email?.trim() || user?.email || "",
+        phone: customerInfo.phone.trim(),
+        deliveryOption: customerInfo.deliveryOption,
+        deliveryAddress: customerInfo.deliveryOption !== "pickup" ? customerInfo.deliveryAddress?.trim() || null : null,
+        pickupLocation: customerInfo.pickupLocation?.trim() || null,
+        timeSlot: customerInfo.timeSlot?.trim() || null,
+        transactionNumber: customerInfo.transactionNumber.trim(),
+        estimatedDelivery: estimatedDeliveryTime,
+      },
+      items: cart.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        unit: item.unit || "kg",
+      })),
+      prescriptionUrl,
+    };
+
+    try {
+      await api.post("/api/orders/create", payload);
+      setOrderComplete(true);
+      cartDispatch({ type: "CLEAR_CART" });
+      setIsCheckoutOpen(false);
+      setCustomerInfo({
+        name: user?.name || "", email: user?.email || "", phone: "",
+        prescription: null, deliveryOption: "", pickupLocation: "",
+        deliveryAddress: "", timeSlot: "", isUIAddress: false, transactionNumber: "",
+      });
+      alert("Order submitted successfully! We will verify your bank transfer and contact you.");
+    } catch (error: any) {
+      alert("Error creating order: " + (error.message || "Unknown error"));
+    } finally {
+      setIsSubmittingOrder(false);
+      setIsProcessing(false);
+    }
   };
-
-  try {
-    const { data } = await api.post("/api/orders/create", payload);
-    console.log("Order created successfully:", data);
-
-    setOrderComplete(true);
-    cartDispatch({ type: "CLEAR_CART" });
-    setIsCheckoutOpen(false);
-
-    // Reset form
-    setCustomerInfo({
-      name: user?.name || "",
-      email: user?.email || "",
-      phone: "",
-      prescription: null,
-      deliveryOption: "",
-      pickupLocation: "",
-      deliveryAddress: "",
-      timeSlot: "",
-      isUIAddress: false,
-      transactionNumber: "",
-    });
-
-    alert("Order submitted successfully! We will verify your bank transfer and contact you.");
-  } catch (error: any) {
-    console.error("Create order error:", error);
-    alert("Error creating order: " + (error.message || "Unknown error"));
-  } finally {
-    setIsSubmittingOrder(false);
-    setIsProcessing(false);
-  }
-};
 
   const debounce = (func: (...args: any[]) => void, wait: number) => {
     let timeout: NodeJS.Timeout;
@@ -605,17 +426,14 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
   const handleInputChange = useCallback(
     debounce((key: keyof CustomerInfo, value: string) => {
       setCustomerInfo((prev) => ({ ...prev, [key]: value }));
-    }, 300),
-    []
+    }, 300), []
   );
 
   const handleSearchInputChange = useCallback(
-    debounce((value: string) => {
-      setSearchQuery(value);
-    }, 300),
-    []
+    debounce((value: string) => { setSearchQuery(value); }, 300), []
   );
 
+  // ─── Quantity Modal ─────────────────────────────────────────────
   const QuantityModal = () => {
     const modalRef = useRef<HTMLDivElement>(null);
 
@@ -625,14 +443,13 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
           setIsQuantityModalOpen(false);
           setSelectedProduct(null);
           setQuantity(1);
+          setSelectedUnit("kg");
         }
       };
-
       if (isQuantityModalOpen) {
         document.addEventListener("mousedown", handleClickOutside);
         document.body.style.overflow = "hidden";
       }
-
       return () => {
         document.removeEventListener("mousedown", handleClickOutside);
         document.body.style.overflow = "unset";
@@ -641,7 +458,17 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
 
     if (!isQuantityModalOpen || !selectedProduct) return null;
 
-    const bundleInfo = getProductBundleInfo(selectedProduct.name, quantity, selectedProduct.price);
+    const congoKg = getCongoKg(selectedProduct.name);
+    const supportsCongo = congoKg !== null;
+
+    const effectiveUnitPrice =
+      selectedUnit === "congo" && congoKg !== null
+        ? congoPriceFromKgPrice(selectedProduct.price, congoKg)
+        : selectedProduct.price;
+
+    const bundleInfo = getProductBundleInfo(selectedProduct.name, quantity, effectiveUnitPrice);
+    const discountedFinal = applyUserDiscount(bundleInfo.finalPrice, !!user);
+    const userDiscountSaving = bundleInfo.finalPrice - discountedFinal;
 
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -649,11 +476,7 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
           <div className="mb-6 flex items-center justify-between">
             <h2 className="text-2xl font-bold text-gray-900">Add to Cart</h2>
             <button
-              onClick={() => {
-                setIsQuantityModalOpen(false);
-                setSelectedProduct(null);
-                setQuantity(1);
-              }}
+              onClick={() => { setIsQuantityModalOpen(false); setSelectedProduct(null); setQuantity(1); setSelectedUnit("kg"); }}
               className="rounded-full p-2 hover:bg-gray-100 transition-colors duration-200"
               aria-label="Close modal"
               disabled={isAddingToCart}
@@ -661,20 +484,23 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
               <X size={24} className="text-red-500" />
             </button>
           </div>
+
           <div className="mb-6 flex items-center gap-6">
             <div className="h-28 w-28 rounded-xl bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4 shadow-inner">
-              <img
-                src={selectedProduct.image}
-                alt={selectedProduct.name}
-                className="h-full w-full object-contain"
-              />
+              <img src={selectedProduct.image} alt={selectedProduct.name} className="h-full w-full object-contain" />
             </div>
             <div className="flex-1">
               <h3 className="text-xl font-bold text-gray-900 mb-2">{selectedProduct.name}</h3>
               <p className="text-sm text-gray-600 mb-3 line-clamp-2">{selectedProduct.description}</p>
-              <p className="text-2xl font-bold text-red-500">
-                ₦{selectedProduct.price.toLocaleString()}
-              </p>
+              <div className="flex items-baseline gap-2">
+                <p className="text-2xl font-bold text-red-500">
+                  ₦{effectiveUnitPrice.toLocaleString()}
+                </p>
+                <span className="text-sm text-gray-500">
+                  per {selectedUnit === "congo" ? "congo" : "kg"}
+                </span>
+              </div>
+             
               {selectedProduct.stock > 0 && (
                 <div className="flex items-center gap-2 mt-2">
                   <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
@@ -683,8 +509,41 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
               )}
             </div>
           </div>
+
+          {supportsCongo && (
+            <div className="mb-6">
+              <p className="text-sm text-gray-600 mb-2">Measure by:</p>
+              <div className="flex gap-2 bg-gray-100 p-1 rounded-xl">
+                <button
+                  onClick={() => setSelectedUnit("kg")}
+                  className={`flex-1 py-2 rounded-lg font-semibold text-sm transition-all duration-200 ${
+                    selectedUnit === "kg"
+                      ? "bg-white text-gray-900 shadow"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                  disabled={isAddingToCart}
+                >
+                  Kg
+                </button>
+                <button
+                  onClick={() => setSelectedUnit("congo")}
+                  className={`flex-1 py-2 rounded-lg font-semibold text-sm transition-all duration-200 ${
+                    selectedUnit === "congo"
+                      ? "bg-gradient-to-r from-red-500 to-orange-500 text-white shadow"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                  disabled={isAddingToCart}
+                >
+                  Congo 
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="mb-8">
-            <p className="text-sm text-gray-600 mb-4">Select Quantity:</p>
+            <p className="text-sm text-gray-600 mb-4">
+              Select Quantity{selectedUnit === "congo" ? " (in congos)" : " (in kg)"}:
+            </p>
             <div className="flex items-center justify-between bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-4">
               <button
                 onClick={() => setQuantity(Math.max(1, quantity - 1))}
@@ -696,7 +555,7 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
               </button>
               <div className="text-center">
                 <div className="text-4xl font-bold text-gray-900">{quantity}</div>
-                <div className="text-sm text-gray-500 mt-1">items</div>
+              
               </div>
               <button
                 onClick={() => setQuantity(quantity + 1)}
@@ -707,8 +566,7 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
                 <Plus size={20} />
               </button>
             </div>
-            
-            {/* Bundle Information */}
+
             {bundleInfo.hasBundle && (
               <div className="mt-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl">
                 <div className="flex items-center gap-2 mb-2">
@@ -716,16 +574,12 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
                   <span className="font-bold text-green-700 text-sm">Bundle Offer Applied!</span>
                 </div>
                 <p className="text-green-600 text-sm mb-1">
-                  {bundleInfo.bundleName} - {bundleInfo.discountPercentage}% OFF
+                  {bundleInfo.bundleName} — {bundleInfo.discountPercentage}% OFF
                 </p>
                 <div className="flex items-center justify-between mt-2">
-                  <span className="text-gray-600 text-sm line-through">
-                    ₦{bundleInfo.originalPrice.toLocaleString()}
-                  </span>
+                  <span className="text-gray-600 text-sm line-through">₦{bundleInfo.originalPrice.toLocaleString()}</span>
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-green-700 text-lg">
-                      ₦{bundleInfo.finalPrice.toLocaleString()}
-                    </span>
+                    <span className="font-bold text-green-700 text-lg">₦{discountedFinal.toLocaleString()}</span>
                     <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
                       Save ₦{bundleInfo.savedAmount.toLocaleString()}
                     </span>
@@ -733,31 +587,40 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
                 </div>
               </div>
             )}
-            
-            {/* Bundle Requirements */}
+
+            {user && SIGNED_IN_DISCOUNT > 0 && userDiscountSaving > 0 && (
+              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between">
+                <span className="text-blue-700 text-sm font-medium">Member discount ({SIGNED_IN_DISCOUNT * 100}%)</span>
+                <span className="text-blue-700 text-sm font-bold">-₦{userDiscountSaving.toLocaleString()}</span>
+              </div>
+            )}
+
+            {!user && SIGNED_IN_DISCOUNT > 0 && (
+              <p className="mt-3 text-center text-xs text-gray-500">
+                <button onClick={() => router.push("/pages/signin")} className="text-red-500 font-semibold hover:underline">
+                  Sign in
+                </button>{" "}
+                to unlock member discounts
+              </p>
+            )}
+
             {!bundleInfo.hasBundle && (
               <div className="mt-4">
-                {selectedProduct.name.toLowerCase().includes('egg') && quantity < 3 && (
-                  <p className="text-sm text-amber-600 text-center">
-                    Add {3 - quantity} more egg(s) for 5% bundle discount
-                  </p>
+                {selectedProduct.name.toLowerCase().includes("egg") && quantity < 3 && (
+                  <p className="text-sm text-amber-600 text-center">Add {3 - quantity} more egg(s) for 5% bundle discount</p>
                 )}
-                {selectedProduct.name.toLowerCase().includes('noodle') && quantity < 3 && (
-                  <p className="text-sm text-amber-600 text-center">
-                    Add {3 - quantity} more noodle(s) for 5% bundle discount
-                  </p>
+                {selectedProduct.name.toLowerCase().includes("noodle") && quantity < 3 && (
+                  <p className="text-sm text-amber-600 text-center">Add {3 - quantity} more noodle(s) for 5% bundle discount</p>
                 )}
-                {selectedProduct.name.toLowerCase().includes('tomato') && 
-                 (selectedProduct.name.toLowerCase().includes('sachet') || 
-                  selectedProduct.name.toLowerCase().includes('satchet')) && 
-                 quantity < 10 && (
-                  <p className="text-sm text-amber-600 text-center">
-                    Add {10 - quantity} more sachet tomato(es) for 5% bundle discount
-                  </p>
+                {selectedProduct.name.toLowerCase().includes("tomato") &&
+                  (selectedProduct.name.toLowerCase().includes("sachet") || selectedProduct.name.toLowerCase().includes("satchet")) &&
+                  quantity < 10 && (
+                    <p className="text-sm text-amber-600 text-center">Add {10 - quantity} more sachet tomato(es) for 5% bundle discount</p>
                 )}
               </div>
             )}
           </div>
+
           <button
             onClick={handleAddToCart}
             disabled={isAddingToCart}
@@ -765,21 +628,15 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
             aria-label={`Add ${selectedProduct.name} to cart`}
           >
             {isAddingToCart ? (
+              <><Loader2 size={20} className="animate-spin" />Adding to Cart...</>
+            ) : bundleInfo.hasBundle ? (
               <>
-                <Loader2 size={20} className="animate-spin" />
-                Adding to Cart...
+                Add to Cart •{" "}
+                <span className="line-through text-white/70 mr-1">₦{bundleInfo.originalPrice.toLocaleString()}</span>
+                ₦{discountedFinal.toLocaleString()}
               </>
             ) : (
-              bundleInfo.hasBundle ? (
-                <>
-                  Add to Cart • <span className="line-through text-white/70 mr-1">
-                    ₦{bundleInfo.originalPrice.toLocaleString()}
-                  </span>
-                  ₦{bundleInfo.finalPrice.toLocaleString()}
-                </>
-              ) : (
-                `Add to Cart • ₦${(selectedProduct.price * quantity).toLocaleString()}`
-              )
+              `Add to Cart • ₦${discountedFinal.toLocaleString()}`
             )}
           </button>
         </div>
@@ -787,21 +644,18 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
     );
   };
 
+  // ─── Cart Modal ───────────────────────────────────────────────────────────────
   const CartModal = () => {
     const modalRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
       const handleClickOutside = (event: MouseEvent) => {
-        if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
-          setIsCartOpen(false);
-        }
+        if (modalRef.current && !modalRef.current.contains(event.target as Node)) setIsCartOpen(false);
       };
-
       if (isCartOpen) {
         document.addEventListener("mousedown", handleClickOutside);
         document.body.style.overflow = "hidden";
       }
-
       return () => {
         document.removeEventListener("mousedown", handleClickOutside);
         document.body.style.overflow = "unset";
@@ -818,20 +672,12 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900">Your Shopping Cart</h2>
-                  <p className="text-gray-500 text-sm mt-1">
-                    {cart.length} {cart.length === 1 ? 'item' : 'items'}
-                  </p>
+                  <p className="text-gray-500 text-sm mt-1">{cart.length} {cart.length === 1 ? "item" : "items"}</p>
                   {totalSavings > 0 && (
-                    <p className="text-green-600 text-sm mt-1 font-medium">
-                      Total Savings: ₦{totalSavings.toLocaleString()}
-                    </p>
+                    <p className="text-green-600 text-sm mt-1 font-medium">Total Savings: ₦{totalSavings.toLocaleString()}</p>
                   )}
                 </div>
-                <button
-                  onClick={() => setIsCartOpen(false)}
-                  className="p-3 hover:bg-gray-100 rounded-full active:scale-95 transition-all duration-200"
-                  aria-label="Close cart"
-                >
+                <button onClick={() => setIsCartOpen(false)} className="p-3 hover:bg-gray-100 rounded-full active:scale-95 transition-all duration-200" aria-label="Close cart">
                   <X size={24} className="text-gray-500" />
                 </button>
               </div>
@@ -844,116 +690,96 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
                   </div>
                   <h3 className="text-xl font-bold text-gray-700 mb-2">Your cart is empty</h3>
                   <p className="text-gray-500 mb-8">Add some items to get started!</p>
-                  <button
-                    onClick={() => setIsCartOpen(false)}
-                    className="bg-gradient-to-r from-red-500 to-orange-500 text-white px-8 py-3 rounded-xl font-semibold hover:from-red-600 hover:to-orange-600 active:scale-95 transition-all duration-200"
-                  >
+                  <button onClick={() => setIsCartOpen(false)} className="bg-gradient-to-r from-red-500 to-orange-500 text-white px-8 py-3 rounded-xl font-semibold hover:from-red-600 hover:to-orange-600 active:scale-95 transition-all duration-200">
                     Continue Shopping
                   </button>
                 </div>
               ) : (
                 <>
                   <div className="space-y-4 mb-8">
-                    {cart
-                      .filter((item) => item?.productId)
-                      .map((item) => {
-                        const bundleInfo = getProductBundleInfo(item.productId.name, item.quantity, item.productId.price);
-                        const displayPrice = bundleInfo.finalPrice;
-                        const isRemoving = isRemovingFromCart === item.productId._id;
-                        const isUpdating = isUpdatingQuantity === item.productId._id;
-                        
-                        return (
-                          <div key={item.productId._id} className="bg-gradient-to-r from-gray-50 to-white rounded-2xl p-4 border border-gray-100 hover:shadow-md transition-all duration-200 relative">
-                            {isRemoving && (
-                              <div className="absolute inset-0 bg-white/80 rounded-2xl flex items-center justify-center z-10">
-                                <Loader2 size={24} className="animate-spin text-red-500" />
-                              </div>
-                            )}
-                            <div className="flex items-center gap-4">
-                              <div className="h-20 w-20 rounded-xl bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center p-2">
-                                <img
-                                  src={`${item?.productId?.image}`}
-                                  alt={item?.productId?.name || "Product"}
-                                  className="h-full w-full object-contain"
-                                />
-                              </div>
-                              <div className="flex-1">
-                                <div className="flex items-start justify-between">
-                                  <h3 className="font-bold text-gray-900 mb-1">{item?.productId?.name || "Unknown Product"}</h3>
-                                  {bundleInfo.hasBundle && (
-                                    <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
-                                      Bundle Save
+                    {cart.map((item) => {
+                      const bundleInfo = getProductBundleInfo(item.name || "", item.quantity, item.price || 0);
+                      const displayPrice = applyUserDiscount(bundleInfo.finalPrice || 0, !!user);
+                      const isRemoving = isRemovingFromCart === item.productId;
+                      const isUpdating = isUpdatingQuantity === item.productId;
+
+                      return (
+                        <div key={item.productId} className="bg-gradient-to-r from-gray-50 to-white rounded-2xl p-4 border border-gray-100 hover:shadow-md transition-all duration-200 relative">
+                          {isRemoving && (
+                            <div className="absolute inset-0 bg-white/80 rounded-2xl flex items-center justify-center z-10">
+                              <Loader2 size={24} className="animate-spin text-red-500" />
+                            </div>
+                          )}
+                          <div className="flex items-center gap-4">
+                            <div className="h-20 w-20 rounded-xl bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center p-2">
+                              <img src={item.image} alt={item.name} className="h-full w-full object-contain" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-start justify-between">
+                                <div>
+                                  <h3 className="font-bold text-gray-900 mb-1">{item.name || "Unknown Product"}</h3>
+                                  {item.unit === "congo" && (
+                                    <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">
+                                      Congo
                                     </span>
                                   )}
                                 </div>
-                                
-                                {bundleInfo.hasBundle ? (
-                                  <div className="mb-3">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-gray-500 text-sm line-through">
-                                        ₦{bundleInfo.originalPrice.toLocaleString()}
-                                      </span>
-                                      <span className="text-red-500 font-bold text-lg">
-                                        ₦{displayPrice.toLocaleString()}
-                                      </span>
-                                    </div>
-                                    <p className="text-xs text-green-600">
-                                      You saved ₦{bundleInfo.savedAmount.toLocaleString()}
-                                    </p>
-                                  </div>
-                                ) : (
-                                  <p className="text-red-500 font-bold text-lg mb-3">
-                                    ₦{displayPrice.toLocaleString()}
-                                  </p>
+                                {bundleInfo.hasBundle && (
+                                  <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">Bundle</span>
                                 )}
-                                
-                                <div className="flex items-center justify-between mt-3">
-                                  <div className="flex items-center gap-3 bg-gradient-to-r from-gray-100 to-gray-200 rounded-full px-4 py-2">
-                                    <button
-                                      onClick={() => handleUpdateQuantity(item.productId._id, item.quantity - 1)}
-                                      disabled={isUpdating || isRemoving || item.quantity <= 1}
-                                      className="p-1 hover:bg-white rounded-full active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                      <Minus size={16} />
-                                    </button>
-                                    <span className="font-bold text-gray-900 min-w-[24px] text-center">
-                                      {isUpdating ? (
-                                        <Loader2 size={16} className="animate-spin mx-auto" />
-                                      ) : (
-                                        item.quantity
-                                      )}
-                                    </span>
-                                    <button
-                                      onClick={() => handleUpdateQuantity(item.productId._id, item.quantity + 1)}
-                                      disabled={isUpdating || isRemoving}
-                                      className="p-1 hover:bg-white rounded-full active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                      <Plus size={16} />
-                                    </button>
+                              </div>
+
+                              {bundleInfo.hasBundle ? (
+                                <div className="mb-3 mt-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-gray-500 text-sm line-through">₦{bundleInfo.originalPrice?.toLocaleString()}</span>
+                                    <span className="text-red-500 font-bold text-lg">₦{displayPrice.toLocaleString()}</span>
                                   </div>
+                                  <p className="text-xs text-green-600">You saved ₦{bundleInfo.savedAmount?.toLocaleString()}</p>
+                                </div>
+                              ) : (
+                                <p className="text-red-500 font-bold text-lg mb-3 mt-1">₦{displayPrice.toLocaleString()}</p>
+                              )}
+
+                              <div className="flex items-center justify-between mt-3">
+                                <div className="flex items-center gap-3 bg-gradient-to-r from-gray-100 to-gray-200 rounded-full px-4 py-2">
                                   <button
-                                    onClick={() => handleRemoveFromCart(item.productId._id)}
-                                    disabled={isRemoving || isUpdating}
-                                    className="p-2 hover:bg-red-50 text-red-500 rounded-xl active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    onClick={() => handleUpdateQuantity(item.productId, item.quantity - 1)}
+                                    disabled={isUpdating || isRemoving || item.quantity <= 1}
+                                    className="p-1 hover:bg-white rounded-full active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                                   >
-                                    {isRemoving ? (
-                                      <Loader2 size={20} className="animate-spin" />
-                                    ) : (
-                                      <X size={20} />
-                                    )}
+                                    <Minus size={16} />
+                                  </button>
+                                  <span className="font-bold text-gray-900 min-w-[24px] text-center">
+                                    {isUpdating ? <Loader2 size={16} className="animate-spin mx-auto" /> : item.quantity}
+                                  </span>
+                                  <button
+                                    onClick={() => handleUpdateQuantity(item.productId, item.quantity + 1)}
+                                    disabled={isUpdating || isRemoving}
+                                    className="p-1 hover:bg-white rounded-full active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    <Plus size={16} />
                                   </button>
                                 </div>
+                                <button
+                                  onClick={() => handleRemoveFromCart(item.productId)}
+                                  disabled={isRemoving || isUpdating}
+                                  className="p-2 hover:bg-red-50 text-red-500 rounded-xl active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {isRemoving ? <Loader2 size={20} className="animate-spin" /> : <X size={20} />}
+                                </button>
                               </div>
                             </div>
                           </div>
-                        );
-                      })}
+                        </div>
+                      );
+                    })}
                   </div>
                   <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-6 mb-6">
                     <div className="space-y-4">
                       {totalSavings > 0 && (
                         <div className="flex justify-between items-center bg-gradient-to-r from-green-50 to-emerald-50 p-3 rounded-lg">
-                          <span className="text-green-600 font-medium">Total Savings</span>
+                          <span className="text-green-600 font-medium">Bundle Savings</span>
                           <span className="font-bold text-green-700">-₦{totalSavings.toLocaleString()}</span>
                         </div>
                       )}
@@ -961,7 +787,6 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
                         <span className="text-gray-600">Subtotal</span>
                         <span className="font-bold text-gray-900">₦{cartTotal.toLocaleString()}</span>
                       </div>
-                     
                       <div className="border-t border-gray-200 pt-4">
                         <div className="flex justify-between items-center">
                           <span className="text-xl font-bold text-gray-900">Total</span>
@@ -971,18 +796,12 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
                     </div>
                   </div>
                   <button
-                    onClick={() => {
-                      setIsCartOpen(false);
-                      setIsCheckoutOpen(true);
-                    }}
+                    onClick={() => { setIsCartOpen(false); setIsCheckoutOpen(true); }}
                     disabled={isSubmittingOrder || cart.length === 0}
                     className="w-full bg-gradient-to-r from-red-500 to-orange-500 text-white py-4 rounded-xl font-bold hover:from-red-600 hover:to-orange-600 active:scale-[0.98] transition-all duration-200 shadow-lg shadow-red-500/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {isSubmittingOrder ? (
-                      <>
-                        <Loader2 size={20} className="animate-spin" />
-                        Processing...
-                      </>
+                      <><Loader2 size={20} className="animate-spin" />Processing...</>
                     ) : (
                       "Proceed to Checkout"
                     )}
@@ -998,7 +817,6 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
 
   const OrderCompleteModal = () => {
     if (!orderComplete) return null;
-
     return (
       <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl max-w-md w-full p-8 text-center shadow-2xl">
@@ -1012,14 +830,12 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
           <h2 className="text-3xl font-bold text-green-600 mb-3">Order Submitted!</h2>
           <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6 mb-8">
             <p className="text-gray-700 mb-4">
-              Your order has been submitted successfully. We will verify your bank transfer and contact you to confirm your order.
+              Your order has been submitted successfully. We will verify your bank transfer and contact you to confirm.
             </p>
             <div className="flex items-center justify-center gap-2 text-gray-600">
               <Clock size={16} />
               <span className="font-medium">
-                {customerInfo.deliveryOption === "pickup" 
-                  ? "Ready for pickup" 
-                  : `Delivery: ${estimatedDelivery}`}
+                {customerInfo.deliveryOption === "pickup" ? "Ready for pickup" : `Delivery: ${estimatedDelivery}`}
               </span>
             </div>
           </div>
@@ -1057,10 +873,7 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
                     ? "bg-gradient-to-r from-red-500 to-orange-500 text-white shadow-lg shadow-red-500/30"
                     : "bg-transparent text-gray-600 hover:text-gray-800 hover:bg-white"
                 }`}
-                onClick={() => {
-                  setViewMode("Supermarket");
-                  setSelectedCategory("All Products");
-                }}
+                onClick={() => { setViewMode("Supermarket"); setSelectedCategory("All Products"); }}
                 aria-label="Switch to Supermarket view"
                 disabled={isSubmittingOrder}
               >
@@ -1076,10 +889,7 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
                     ? "bg-gradient-to-r from-red-500 to-orange-500 text-white shadow-lg shadow-red-500/30"
                     : "bg-transparent text-gray-600 hover:text-gray-800 hover:bg-white"
                 }`}
-                onClick={() => {
-                  setViewMode("Pharmacy");
-                  setSelectedCategory("All Category");
-                }}
+                onClick={() => { setViewMode("Pharmacy"); setSelectedCategory("All Category"); }}
                 aria-label="Switch to Pharmacy view"
                 disabled={isSubmittingOrder}
               >
@@ -1092,28 +902,18 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
                 </span>
               </button>
             </div>
-            
-            {/* Right side buttons - Cart and Prescription Upload */}
+
             <div className="flex items-center gap-3">
-              {/* Prescription Upload Button - Only visible in Pharmacy mode */}
               {viewMode === "Pharmacy" && (
                 <button
-                  onClick={() => {
-                    if (!user) {
-                      setIsUnauthenticatedModalOpen(true);
-                      return;
-                    }
-                    setIsPrescriptionModalOpen(true);
-                  }}
+                  onClick={() => setIsPrescriptionModalOpen(true)}
                   className="relative group"
                   aria-label="Upload prescription"
                   disabled={isSubmittingOrder}
                 >
-                  {/* Button content here */}
+                  <FileText size={24} className="text-gray-700 group-hover:text-red-500 transition-colors" />
                 </button>
               )}
-              
-              {/* Cart Button */}
               <button
                 onClick={() => setIsCartOpen(true)}
                 className="relative p-4 bg-gradient-to-r from-red-500 to-orange-500 text-white rounded-xl hover:from-red-600 hover:to-orange-600 active:scale-95 transition-all duration-300 shadow-lg hover:shadow-xl hover:shadow-red-500/30 group disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1136,7 +936,6 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-       
         <div className="mb-8">
           <h1 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-4 text-center">
             Your <span className="bg-gradient-to-r from-red-500 to-orange-500 bg-clip-text text-transparent">Groceries</span> Delivered
@@ -1146,11 +945,8 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
           </p>
         </div>
 
-        <div>
-          <StatsStrip/>
-        </div>
+        <div><StatsStrip /></div>
 
-        {/* Pharmacy Category Pills - Only show in Pharmacy mode */}
         {viewMode === "Pharmacy" && (
           <div className="mb-8">
             <div className="flex flex-col items-left justify-between mb-4">
@@ -1164,57 +960,60 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
                 Upload Prescription
               </button>
             </div>
-           
           </div>
         )}
 
         <div className="mb-12">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-2xl lg:text-3xl font-bold text-gray-900">
-              {selectedCategory === "All Products" || selectedCategory === "All Category"
-                ? "All Products"
-                : selectedCategory}
+              {selectedCategory === "All Products" || selectedCategory === "All Category" ? "All Products" : selectedCategory}
             </h3>
             <span className="text-gray-500">{filteredProducts.length} items</span>
           </div>
-          {filteredProducts.length > 0 ? (
+
+          {loadingProducts ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 lg:gap-6">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <SkeletonLoader key={i} />
+              ))}
+            </div>
+          ) : filteredProducts.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 lg:gap-6">
               {filteredProducts.map((product) => {
-                const hasBundle = product.name.toLowerCase().includes('egg') || 
-                  product.name.toLowerCase().includes('noodle') ||
-                  (product.name.toLowerCase().includes('tomato') && 
-                   (product.name.toLowerCase().includes('sachet') || 
-                    product.name.toLowerCase().includes('satchet')));
-                
+                const hasBundle =
+                  product.name.toLowerCase().includes("egg") ||
+                  product.name.toLowerCase().includes("noodle") ||
+                  (product.name.toLowerCase().includes("tomato") &&
+                    (product.name.toLowerCase().includes("sachet") || product.name.toLowerCase().includes("satchet")));
+
+                const congoKg = getCongoKg(product.name);
+
                 return (
                   <div
                     key={product._id}
-                    className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 
-                               border border-gray-100 hover:border-red-100 group
-                               flex flex-col h-full"
+                    className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100 hover:border-red-100 group flex flex-col h-full"
                   >
-                    {/* Image container - fixed height */}
-                    <div className="w-full h-40 rounded-lg mb-4 flex items-center justify-center 
-                                  group-hover:from-red-50 group-hover:to-orange-50 
-                                  transition-all duration-300">
+                    <div className="w-full h-40 rounded-lg mb-4 flex items-center justify-center group-hover:from-red-50 group-hover:to-orange-50 transition-all duration-300">
                       <img
-                        src={`${product.image}`}
+                        src={product.image}
                         alt={product.name}
                         className="h-40 w-40 object-contain group-hover:scale-105 transition-transform duration-300"
                         loading="lazy"
                       />
                     </div>
 
-                    {/* Content area - grows to push button down */}
                     <div className="flex flex-col flex-grow px-2 pb-4">
-                      <h4 className="font-bold text-gray-900 mb-2 line-clamp-2 text-sm lg:text-base">
-                        {product.name}
-                      </h4>
+                      <h4 className="font-bold text-gray-900 mb-2 line-clamp-2 text-sm lg:text-base">{product.name}</h4>
 
                       <div className="flex items-center justify-between mt-auto">
-                        <p className="text-lg font-bold text-red-500">
-                          ₦{product?.price.toLocaleString()}
-                        </p>
+                        <div>
+                          <p className="text-lg font-bold text-red-500">₦{product.price.toLocaleString()}<span className="text-xs text-gray-400 font-normal"></span></p>
+                          {congoKg !== null && (
+                            <p className="text-xs text-orange-600 font-medium">
+                              ₦{congoPriceFromKgPrice(product.price, congoKg).toLocaleString()}/congo
+                            </p>
+                          )}
+                        </div>
                         <div className="flex items-center gap-2">
                           {product.stock > 0 ? (
                             <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
@@ -1229,33 +1028,28 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
 
                       {hasBundle && product.stock > 0 && (
                         <div className="mt-2">
-                          {product.name.toLowerCase().includes('egg') && (
-                            <p className="text-xs text-blue-600 font-medium">
-                              🎁 Buy 3+ for 5% off
-                            </p>
+                          {product.name.toLowerCase().includes("egg") && (
+                            <p className="text-xs text-blue-600 font-medium">🎁 Buy 3+ for 5% off</p>
                           )}
-                          {product.name.toLowerCase().includes('noodle') && (
-                            <p className="text-xs text-blue-600 font-medium">
-                              🎁 Buy 3+ for 5% off
-                            </p>
+                          {product.name.toLowerCase().includes("noodle") && (
+                            <p className="text-xs text-blue-600 font-medium">🎁 Buy 3+ for 5% off</p>
                           )}
-                          {(product.name.toLowerCase().includes('tomato') && 
-                            (product.name.toLowerCase().includes('sachet') || 
-                             product.name.toLowerCase().includes('satchet'))) && (
-                            <p className="text-xs text-blue-600 font-medium">
-                              🎁 Buy 10+ for 5% off
-                            </p>
+                          {product.name.toLowerCase().includes("tomato") &&
+                            (product.name.toLowerCase().includes("sachet") || product.name.toLowerCase().includes("satchet")) && (
+                              <p className="text-xs text-blue-600 font-medium">🎁 Buy 10+ for 5% off</p>
                           )}
                         </div>
                       )}
+
+                      {congoKg !== null && product.stock > 0 && (
+                        <p className="text-xs text-orange-500 font-medium mt-1">📏 Available by congo</p>
+                      )}
                     </div>
 
-                    {/* Button always at bottom */}
                     <button
                       onClick={() => openQuantityModal(product)}
                       disabled={product.stock === 0 || isAddingToCart || isSubmittingOrder}
-                      className={`mx-2 mb-2 py-2.5 rounded-lg font-semibold text-sm 
-                                  transition-all duration-300 active:scale-95 flex items-center justify-center gap-2 ${
+                      className={`mx-2 mb-2 py-2.5 rounded-lg font-semibold text-sm transition-all duration-300 active:scale-95 flex items-center justify-center gap-2 ${
                         product.stock > 0
                           ? "bg-gradient-to-r from-red-500 to-orange-500 text-white hover:from-red-600 hover:to-orange-600"
                           : "bg-gray-200 text-gray-500 cursor-not-allowed"
@@ -1264,10 +1058,7 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
                     >
                       {product.stock > 0 ? (
                         isAddingToCart && selectedProduct?._id === product._id ? (
-                          <>
-                            <Loader2 size={16} className="animate-spin" />
-                            Adding...
-                          </>
+                          <><Loader2 size={16} className="animate-spin" />Adding...</>
                         ) : (
                           "Add to Cart"
                         )
@@ -1280,17 +1071,13 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
               })}
             </div>
           ) : (
-            <div className="text-center py-12">
-              <SkeletonLoader/>
-            </div>
+            <div className="text-center py-12"><SkeletonLoader /></div>
           )}
         </div>
 
-        <div>
-          <TestimonialSlider/>
-        </div>
+        <div><TestimonialSlider /></div>
       </main>
-    
+
       <QuantityModal />
       <CartModal />
       <CheckoutModal
@@ -1305,13 +1092,11 @@ const submitOrder = async (customerInfo: CustomerInfo) => {
         isProcessing={isProcessing}
         submitOrder={submitOrder}
         cart={cart}
-        isSubmittingOrder={isSubmittingOrder} // Pass this prop to CheckoutModal
+        isSubmittingOrder={isSubmittingOrder}
       />
       <OrderCompleteModal />
-      <UnauthenticatedModal />
-      
-      {/* Prescription Upload Modal */}
-      <UploadPrescriptionModal 
+
+      <UploadPrescriptionModal
         isOpen={isPrescriptionModalOpen}
         onClose={() => setIsPrescriptionModalOpen(false)}
       />

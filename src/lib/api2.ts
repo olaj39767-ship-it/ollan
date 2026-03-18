@@ -3,7 +3,7 @@ import { Order } from '../types/order';
 import { Rider } from '../types/order';
 
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'https://ollanback.vercel.app/api',
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api',
 });
 
 api.interceptors.request.use((config) => {
