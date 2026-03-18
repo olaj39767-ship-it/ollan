@@ -819,7 +819,7 @@ const estimatedDeliveryTime = calculateDeliveryTime(orderTime, customerInfo.deli
               </svg>
             </div>
           </div>
-          <h2 className="text-3xl font-bold text-green-600 mb-3">Order Submitted!</h2>
+          <h2 className="text-3xl font-bold text-green-600 mb-3">Order Submitted.</h2>
           <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6 mb-8">
             <p className="text-gray-700 mb-4">
               Your order has been submitted successfully. We will verify your bank transfer and contact you to confirm.
