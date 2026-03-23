@@ -173,6 +173,18 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [paymentMode, setPaymentMode] = useState<"manual" | "screenshot">("screenshot");
+  const [promoCode, setPromoCode] = useState("");
+  const [promoStatus, setPromoStatus] = useState<"idle" | "valid" | "invalid">("idle");
+
+  const VALID_PROMO_CODES = ["mz10", "oy10", "em10", "tl10", "bsp10"];
+
+  const handlePromoApply = () => {
+    if (VALID_PROMO_CODES.includes(promoCode.trim().toLowerCase())) {
+      setPromoStatus("valid");
+    } else {
+      setPromoStatus("invalid");
+    }
+  };
 
   const deliveryAreas = ["Agbowo", "University of Ibadan"];
 
@@ -208,6 +220,8 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       setCurrentStep(1);
       setScreenshotPreview(null);
       setPaymentMode("screenshot");
+      setPromoCode("");
+      setPromoStatus("idle");
 
       const newOrderId = generateOrderId();
       setCustomerInfo((prev) => ({
@@ -365,6 +379,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       transactionNumber: customerInfo.transactionNumber.trim(),
       orderId: customerInfo.orderId,
       paymentScreenshot: customerInfo.paymentScreenshot ?? null,
+      promoCode: promoStatus === "valid" ? promoCode.trim().toLowerCase() : "",
     };
 
     // Send email notification (non-blocking)
@@ -634,6 +649,55 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       </div>
                     </div>
                   )}
+
+                  {/* Referral / Promo Code */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                      Referral Code <span className="font-normal normal-case text-gray-400">(optional)</span>
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={promoCode}
+                        onChange={(e) => {
+                          setPromoCode(e.target.value);
+                          setPromoStatus("idle");
+                        }}
+                        className={`flex-1 px-4 py-3.5 text-sm border rounded-xl focus:ring-2 focus:border-transparent bg-gray-50 text-gray-800 outline-none transition-all font-mono tracking-widest uppercase ${
+                          promoStatus === "valid"
+                            ? "border-green-400 focus:ring-green-300"
+                            : promoStatus === "invalid"
+                            ? "border-red-400 focus:ring-red-300"
+                            : "border-gray-200 focus:ring-red-400"
+                        }`}
+                        placeholder="Enter code"
+                        disabled={isProcessing || isSubmittingOrder || promoStatus === "valid"}
+                        maxLength={10}
+                      />
+                      <button
+                        type="button"
+                        onClick={handlePromoApply}
+                        disabled={!promoCode.trim() || promoStatus === "valid" || isProcessing || isSubmittingOrder}
+                        className={`px-4 py-3.5 rounded-xl text-sm font-bold transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
+                          promoStatus === "valid"
+                            ? "bg-green-500 text-white"
+                            : "bg-red-500 hover:bg-red-600 text-white"
+                        }`}
+                      >
+                        {promoStatus === "valid" ? <CheckCircle size={16} /> : "Apply"}
+                      </button>
+                    </div>
+                    {promoStatus === "valid" && (
+                      <p className="text-xs text-green-600 font-semibold mt-1.5 flex items-center gap-1">
+                        <CheckCircle size={11} /> Referral code applied!
+                      </p>
+                    )}
+                    {promoStatus === "invalid" && (
+                      <p className="text-xs text-red-500 mt-1.5 flex items-center gap-1">
+                        <AlertCircle size={11} /> Invalid code. Please try again.
+                      </p>
+                    )}
+                  </div>
                 </>
               )}
 
