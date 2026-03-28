@@ -143,9 +143,44 @@ const pharmacyCategories = [
   "Skin Care", "Baby Care", "Sexual Health", "Vitamins and Supplements",
 ];
 
+// Business Hours Helper Functions
+const isWithinBusinessHours = (): boolean => {
+  const now = new Date();
+  const day = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  const hours = now.getHours();
+  const minutes = now.getMinutes();
+  const currentTimeInMinutes = hours * 60 + minutes;
+
+  const isWeekend = day === 0 || day === 6;
+  
+  if (isWeekend) {
+    // Weekend: 8am (8:00) to 6pm (18:00)
+    const weekendStart = 8 * 60; // 8:00 AM
+    const weekendEnd = 18 * 60; // 6:00 PM
+    return currentTimeInMinutes >= weekendStart && currentTimeInMinutes < weekendEnd;
+  } else {
+    // Weekday: 8am (8:00) to 10pm (22:00)
+    const weekdayStart = 8 * 60; // 8:00 AM
+    const weekdayEnd = 22 * 60; // 10:00 PM
+    return currentTimeInMinutes >= weekdayStart && currentTimeInMinutes < weekdayEnd;
+  }
+};
+
+const getBusinessStatusMessage = (): string => {
+  const now = new Date();
+  const day = now.getDay();
+  const isWeekend = day === 0 || day === 6;
+  
+  if (isWeekend) {
+    return "⏰ Open: Weekends 8am - 6pm";
+  } else {
+    return "⏰ Open: Weekdays 8am - 10pm";
+  }
+};
+
 const PharmacyApp: React.FC = () => {
   const router = useRouter();
-const { user, setUser } = useAuth();
+  const { user, setUser } = useAuth();
   const [selectedCategory, setSelectedCategory] = useState<string>("All Products");
   const [viewMode, setViewMode] = useState<"Pharmacy" | "Supermarket">("Supermarket");
   const [cart, cartDispatch] = useReducer(cartReducer, []);
@@ -155,7 +190,7 @@ const { user, setUser } = useAuth();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [quantity, setQuantity] = useState<number>(1);
   const [selectedUnit, setSelectedUnit] = useState<"kg" | "congo">("kg");
-const nextSectionRef = useRef<HTMLDivElement | null>(null);
+  const nextSectionRef = useRef<HTMLDivElement | null>(null);
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo>({
     name: "", email: "", phone: "", prescription: null,
     deliveryOption: "", pickupLocation: "", deliveryAddress: "",
@@ -177,11 +212,32 @@ const nextSectionRef = useRef<HTMLDivElement | null>(null);
 
   // Store Credit
   const [useStoreCredit, setUseStoreCredit] = useState<boolean>(false);
-user?.name ? user.name.split(" ")[0] : "Guest";
+  user?.name ? user.name.split(" ")[0] : "Guest";
   const isLoggedIn = !!user;
+
+  // Business Hours State
+  const [isOpen, setIsOpen] = useState<boolean>(isWithinBusinessHours());
+  const [businessStatusMessage, setBusinessStatusMessage] = useState<string>(getBusinessStatusMessage());
+
+  // Check business hours every minute
+  useEffect(() => {
+    const checkBusinessHours = () => {
+      setIsOpen(isWithinBusinessHours());
+      setBusinessStatusMessage(getBusinessStatusMessage());
+    };
+    
+    checkBusinessHours();
+    const interval = setInterval(checkBusinessHours, 60000); // Check every minute
+    
+    return () => clearInterval(interval);
+  }, []);
 
   // Open quantity modal
   const openQuantityModal = (product: Product) => {
+    if (!isOpen) {
+      alert(`Sorry, we're currently closed. ${businessStatusMessage}`);
+      return;
+    }
     setSelectedProduct(product);
     setQuantity(1);
     setSelectedUnit("kg");
@@ -197,25 +253,25 @@ user?.name ? user.name.split(" ")[0] : "Guest";
   }, [user]);
 
   // Add this useEffect in PharmacyApp, after the existing useEffects:
-useEffect(() => {
-  if (!isLoggedIn) return;
-  
-  const fetchFreshCredit = async () => {
-    try {
-      const { data } = await api.get("/api/user/me");
-      const updated = {
-        ...user!,
-        storeCredit: data.storeCredit ?? 0,
-      };
-      setUser(updated);
-      localStorage.setItem("user", JSON.stringify(updated));
-    } catch (err) {
-      console.error("Failed to refresh store credit:", err);
-    }
-  };
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    
+    const fetchFreshCredit = async () => {
+      try {
+        const { data } = await api.get("/api/user/me");
+        const updated = {
+          ...user!,
+          storeCredit: data.storeCredit ?? 0,
+        };
+        setUser(updated);
+        localStorage.setItem("user", JSON.stringify(updated));
+      } catch (err) {
+        console.error("Failed to refresh store credit:", err);
+      }
+    };
 
-  fetchFreshCredit();
-}, [isLoggedIn]); // runs once when logged-in status is known
+    fetchFreshCredit();
+  }, [isLoggedIn]); // runs once when logged-in status is known
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -244,7 +300,7 @@ useEffect(() => {
   }, []);
 
   
-const availableStoreCredit = user?.storeCredit || 0;
+  const availableStoreCredit = user?.storeCredit || 0;
   const displayName = user?.name ? user.name.split(" ")[0] : "Guest";
 
   const calculateDeliveryTime = (orderTime: Date, deliveryOption: string): string => {
@@ -299,6 +355,15 @@ const availableStoreCredit = user?.storeCredit || 0;
   const deliveryFee = 0;
 
   const handleAddToCart = async () => {
+    if (!isOpen) {
+      alert(`Sorry, we're currently closed. ${businessStatusMessage}`);
+      setIsQuantityModalOpen(false);
+      setSelectedProduct(null);
+      setQuantity(1);
+      setSelectedUnit("kg");
+      return;
+    }
+    
     if (!selectedProduct || quantity <= 0 || isAddingToCart) return;
     setIsAddingToCart(true);
 
@@ -347,78 +412,83 @@ const availableStoreCredit = user?.storeCredit || 0;
     cartDispatch({ type: "UPDATE_QUANTITY", payload: { id: productId, quantity: newQuantity } });
   };
 
-const submitOrder = async (info: CustomerInfo) => {
-  setIsSubmittingOrder(true);
-  setIsProcessing(true);
-
-  try {
-    const orderTime = new Date();
-    const estimatedDeliveryTime = calculateDeliveryTime(orderTime, info.deliveryOption);
-    setEstimatedDelivery(estimatedDeliveryTime);
-
-    // ✅ Use info.storeCreditUsed which is computed and passed in from CheckoutModal
-    const storeCreditToUse = info.storeCreditUsed ?? 0;
-
-    const payload = {
-      customerInfo: {
-        name: info.name?.trim() || user?.name || "Guest",
-        email: info.email?.trim() || user?.email || "",
-        phone: info.phone.trim(),
-        deliveryOption: info.deliveryOption,
-        deliveryAddress: info.deliveryOption !== "pickup"
-          ? info.deliveryAddress?.trim() || null
-          : null,
-        pickupLocation: info.pickupLocation?.trim() || null,
-        timeSlot: info.timeSlot?.trim() || null,
-        transactionNumber: info.transactionNumber.trim(),
-        estimatedDelivery: estimatedDeliveryTime,
-      },
-      items: cart.map((item) => ({
-        productId: item.productId,
-        quantity: item.quantity,
-      })),
-      prescriptionUrl: "",
-      referralCode: info.referralCode || undefined,
-storeCreditApplied: useStoreCredit, // boolean — backend reads the real amount from DB
-    };
-
-    const response = await api.post("/api/orders/create", payload);
-if (response.data.storeCreditApplied) {
-  try {
-    const { data: freshUser } = await api.get("/api/users/me");
-    const updated = {
-      id: freshUser._id,
-      name: freshUser.name,
-      email: freshUser.email,
-      role: freshUser.role,
-      referralCode: freshUser.referralCode,
-      storeCredit: freshUser.storeCredit,  // ← fresh from DB
-    };
-    setUser(updated);                                    // update context
-    localStorage.setItem('user', JSON.stringify(updated)); // sync localStorage
-  } catch (err) {
-    console.error('Failed to refresh user:', err);
-  }
-}
-    if (storeCreditToUse > 0) {
-      alert(`✅ Order placed!\n\n₦${storeCreditToUse.toLocaleString()} store credit deducted.`);
-    } else {
-      alert("✅ Order submitted! We will verify your payment.");
+  const submitOrder = async (info: CustomerInfo) => {
+    if (!isOpen) {
+      alert(`Sorry, we're currently closed. ${businessStatusMessage}`);
+      return;
     }
+    
+    setIsSubmittingOrder(true);
+    setIsProcessing(true);
 
-    setOrderComplete(true);
-    cartDispatch({ type: "CLEAR_CART" });
-    setIsCheckoutOpen(false);
-    setUseStoreCredit(false);
+    try {
+      const orderTime = new Date();
+      const estimatedDeliveryTime = calculateDeliveryTime(orderTime, info.deliveryOption);
+      setEstimatedDelivery(estimatedDeliveryTime);
 
-  } catch (error: any) {
-    console.error("Order error:", error.response?.data || error);
-    alert("Error: " + (error.response?.data?.message || error.message || "Unknown error"));
-  } finally {
-    setIsSubmittingOrder(false);
-    setIsProcessing(false);
-  }
-};
+      // ✅ Use info.storeCreditUsed which is computed and passed in from CheckoutModal
+      const storeCreditToUse = info.storeCreditUsed ?? 0;
+
+      const payload = {
+        customerInfo: {
+          name: info.name?.trim() || user?.name || "Guest",
+          email: info.email?.trim() || user?.email || "",
+          phone: info.phone.trim(),
+          deliveryOption: info.deliveryOption,
+          deliveryAddress: info.deliveryOption !== "pickup"
+            ? info.deliveryAddress?.trim() || null
+            : null,
+          pickupLocation: info.pickupLocation?.trim() || null,
+          timeSlot: info.timeSlot?.trim() || null,
+          transactionNumber: info.transactionNumber.trim(),
+          estimatedDelivery: estimatedDeliveryTime,
+        },
+        items: cart.map((item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+        })),
+        prescriptionUrl: "",
+        referralCode: info.referralCode || undefined,
+        storeCreditApplied: useStoreCredit, // boolean — backend reads the real amount from DB
+      };
+
+      const response = await api.post("/api/orders/create", payload);
+      if (response.data.storeCreditApplied) {
+        try {
+          const { data: freshUser } = await api.get("/api/users/me");
+          const updated = {
+            id: freshUser._id,
+            name: freshUser.name,
+            email: freshUser.email,
+            role: freshUser.role,
+            referralCode: freshUser.referralCode,
+            storeCredit: freshUser.storeCredit,  // ← fresh from DB
+          };
+          setUser(updated);                                    // update context
+          localStorage.setItem('user', JSON.stringify(updated)); // sync localStorage
+        } catch (err) {
+          console.error('Failed to refresh user:', err);
+        }
+      }
+      if (storeCreditToUse > 0) {
+        alert(`✅ Order placed!\n\n₦${storeCreditToUse.toLocaleString()} store credit deducted.`);
+      } else {
+        alert("✅ Order submitted! We will verify your payment.");
+      }
+
+      setOrderComplete(true);
+      cartDispatch({ type: "CLEAR_CART" });
+      setIsCheckoutOpen(false);
+      setUseStoreCredit(false);
+
+    } catch (error: any) {
+      console.error("Order error:", error.response?.data || error);
+      alert("Error: " + (error.response?.data?.message || error.message || "Unknown error"));
+    } finally {
+      setIsSubmittingOrder(false);
+      setIsProcessing(false);
+    }
+  };
 
   // Quantity Modal (your original)
   const QuantityModal = () => {
@@ -528,7 +598,7 @@ if (response.data.storeCreditApplied) {
 
           <button
             onClick={handleAddToCart}
-            disabled={isAddingToCart}
+            disabled={isAddingToCart || !isOpen}
             className="w-full bg-gradient-to-r from-red-500 to-orange-500 py-4 rounded-xl font-bold text-white hover:from-red-600 hover:to-orange-600 active:scale-[0.98] transition-all duration-200 shadow-lg shadow-red-500/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {isAddingToCart ? <><Loader2 size={20} className="animate-spin" />Adding to Cart...</> : `Add to Cart • ₦${discountedFinal.toLocaleString()}`}
@@ -649,8 +719,15 @@ if (response.data.storeCreditApplied) {
                   </div>
 
                   <button
-                    onClick={() => { setIsCartOpen(false); setIsCheckoutOpen(true); }}
-                    disabled={cart.length === 0}
+                    onClick={() => { 
+                      if (!isOpen) {
+                        alert(`Sorry, we're currently closed. ${businessStatusMessage}`);
+                        return;
+                      }
+                      setIsCartOpen(false); 
+                      setIsCheckoutOpen(true); 
+                    }}
+                    disabled={cart.length === 0 || !isOpen}
                     className="w-full bg-gradient-to-r from-red-500 to-orange-500 text-white py-4 rounded-xl font-bold hover:from-red-600 hover:to-orange-600 active:scale-[0.98] transition-all duration-200 shadow-lg shadow-red-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Proceed to Checkout
@@ -708,6 +785,8 @@ if (response.data.storeCreditApplied) {
               </div>
             </Link>
 
+        
+
             {/* Supermarket / Pharmacy Toggle - RESTORED */}
             <div className="flex gap-1 bg-gradient-to-r from-gray-100 to-gray-200 p-1.5 rounded-full shadow-inner">
               <button
@@ -745,113 +824,111 @@ if (response.data.storeCreditApplied) {
             </div>
 
             {/* User Info + Store Credit */}
-                <button
-                onClick={() => setIsCartOpen(true)}
-                className="relative p-4 bg-gradient-to-r from-red-500 to-orange-500 text-white rounded-xl hover:from-red-600 hover:to-orange-600 active:scale-95 transition-all duration-300 shadow-lg hover:shadow-xl"
-              >
-                <ShoppingCart size={24} />
-                {cart.length > 0 && (
-                  <span className="absolute -top-3 -right-3 bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-xs font-bold rounded-full h-6 w-6 flex items-center justify-center border-2 border-white">
-                    {cart.reduce((total, item) => total + item.quantity, 0)}
-                  </span>
-                )}
-              </button>
+            <button
+              onClick={() => setIsCartOpen(true)}
+              className="relative p-4 bg-gradient-to-r from-red-500 to-orange-500 text-white rounded-xl hover:from-red-600 hover:to-orange-600 active:scale-95 transition-all duration-300 shadow-lg hover:shadow-xl"
+            >
+              <ShoppingCart size={24} />
+              {cart.length > 0 && (
+                <span className="absolute -top-3 -right-3 bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-xs font-bold rounded-full h-6 w-6 flex items-center justify-center border-2 border-white">
+                  {cart.reduce((total, item) => total + item.quantity, 0)}
+                </span>
+              )}
+            </button>
            
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-     <section className="relative overflow-hidden py-16 lg:py-5">
-  {/* Background Glow */}
-  <div className="absolute -top-32 -left-32 w-96 h-96 bg-red-400/20 blur-[120px] rounded-full" />
-  <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-orange-400/20 blur-[120px] rounded-full" />
+        <section className="relative overflow-hidden py-16 lg:py-5">
+          {/* Background Glow */}
+          <div className="absolute -top-32 -left-32 w-96 h-96 bg-red-400/20 blur-[120px] rounded-full" />
+          <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-orange-400/20 blur-[120px] rounded-full" />
 
-  <div className="relative max-w-7xl mx-auto px-6 lg:px-8">
-    <div className="grid lg:grid-cols-2 gap-12 items-center">
-      
-      {/* LEFT SIDE - Text Content */}
-      <div>
-        <h1 className="text-4xl lg:text-6xl font-extrabold text-gray-900 leading-tight">
-          Fresh 
-          <span className="bg-gradient-to-r from-red-500 via-orange-500 to-yellow-500 bg-clip-text text-transparent animate-gradient">
-             Groceries
-          </span>{" "}
-          Delivered Fast
-        </h1>
+          <div className="relative max-w-7xl mx-auto px-6 lg:px-8">
+            <div className="grid lg:grid-cols-2 gap-12 items-center">
+              
+              {/* LEFT SIDE - Text Content */}
+              <div>
+                <h1 className="text-4xl lg:text-6xl font-extrabold text-gray-900 leading-tight">
+                  Fresh 
+                  <span className="bg-gradient-to-r from-red-500 via-orange-500 to-yellow-500 bg-clip-text text-transparent animate-gradient">
+                     Groceries
+                  </span>{" "}
+                  Delivered Fast
+                </h1>
 
-        <p className="mt-6 text-gray-600 text-lg max-w-xl">
-          Groceries and pharmacy essentials delivered to your doorstep in minutes — safe, fresh, and reliable.
-        </p>
+                <p className="mt-6 text-gray-600 text-lg max-w-xl">
+                  Groceries and pharmacy essentials delivered to your doorstep in minutes — safe, fresh, and reliable.
+                </p>
 
-        <div className="mt-8 flex items-center gap-4">
-          {!isLoggedIn && (
-            <button
-              onClick={() => router.push("/pages/signin")}
-              className="flex items-center gap-2 bg-gradient-to-r from-red-500 to-orange-500 text-white px-6 py-3 rounded-2xl font-semibold shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300"
-            >
-              <LogIn size={18} />
-              Get Started
-            </button>
-          )}
+                <div className="mt-8 flex items-center gap-4">
+                  {!isLoggedIn && (
+                    <button
+                      onClick={() => router.push("/pages/signin")}
+                      className="flex items-center gap-2 bg-gradient-to-r from-red-500 to-orange-500 text-white px-6 py-3 rounded-2xl font-semibold shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300"
+                    >
+                      <LogIn size={18} />
+                      Get Started
+                    </button>
+                  )}
+                </div>
+              </div>
 
- 
-        </div>
-      </div>
+              {/* RIGHT SIDE - User Card */}
+              <div className="flex justify-center lg:justify-end">
+                <div className="backdrop-blur-xl bg-white/70 border border-white/50 shadow-2xl rounded-3xl p-6 w-full max-w-sm transition hover:scale-[1.02] duration-300">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 flex items-center justify-center bg-gradient-to-r from-red-500 to-orange-500 text-white rounded-2xl shadow-md">
+                      <UserIcon size={22} />
+                    </div>
 
-      {/* RIGHT SIDE - User Card */}
-      <div className="flex justify-center lg:justify-end">
-      <div className="backdrop-blur-xl bg-white/70 border border-white/50 shadow-2xl rounded-3xl p-6 w-full max-w-sm transition hover:scale-[1.02] duration-300">
-  
-  <div className="flex items-center gap-4">
-    <div className="w-12 h-12 flex items-center justify-center bg-gradient-to-r from-red-500 to-orange-500 text-white rounded-2xl shadow-md">
-      <UserIcon size={22} />
-    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">
+                        {isLoggedIn ? `Welcome back 👋 ${displayName}` : "You're not logged in"}
+                      </p>
 
-    <div>
-      <p className="text-sm text-gray-500">
-        {isLoggedIn ? `Welcome back 👋 ${displayName}` : "You're not logged in"}
-      </p>
+                      {isLoggedIn && availableStoreCredit && (
+                        <p className="text-sm text-emerald-600 font-semibold mt-1">
+                          ₦{availableStoreCredit.toLocaleString()} Store Credit
+                        </p>
+                      )}
+                    </div>
+                  </div>
 
-      {isLoggedIn && availableStoreCredit && (
-        <p className="text-sm text-emerald-600 font-semibold mt-1">
-          ₦{availableStoreCredit.toLocaleString()} Store Credit
-        </p>
-      )}
-    </div>
-  </div>
+                  {!isLoggedIn && (
+                    <div className="mt-6 flex flex-col gap-3">
+                      <button
+                        onClick={() => router.push("/pages/signin")}
+                        className="w-full bg-gray-900 text-white py-3 rounded-2xl font-medium hover:bg-black transition"
+                      >
+                        Log in
+                      </button>
 
-  {!isLoggedIn && (
-    <div className="mt-6 flex flex-col gap-3">
-      <button
-        onClick={() => router.push("/pages/signin")}
-        className="w-full bg-gray-900 text-white py-3 rounded-2xl font-medium hover:bg-black transition"
-      >
-        Log in
-      </button>
+                      <button
+                        onClick={() => {
+                          nextSectionRef.current?.scrollIntoView({
+                            behavior: "smooth",
+                            block: "start",
+                          });
+                        }}
+                        className="w-full border border-gray-300 py-3 rounded-2xl font-medium hover:bg-gray-100 transition"
+                      >
+                        Continue Shopping
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
 
-    <button
-  onClick={() => {
-    nextSectionRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
-  }}
-  className="w-full border border-gray-300 py-3 rounded-2xl font-medium hover:bg-gray-100 transition"
->
-  Continue Shopping
-</button>
-    </div>
-  )}
-</div>
-      </div>
-
-    </div>
-  </div>
-</section>
+            </div>
+          </div>
+        </section>
 
         <div ref={nextSectionRef}>
-<StatsStrip /></div>
+          <StatsStrip />
+        </div>
 
         {viewMode === "Pharmacy" && (
           <div className="mb-8">
@@ -927,12 +1004,14 @@ if (response.data.storeCreditApplied) {
 
                     <button
                       onClick={() => openQuantityModal(product)}
-                      disabled={product.stock === 0 || isAddingToCart || isSubmittingOrder}
+                      disabled={product.stock === 0 || isAddingToCart || isSubmittingOrder || !isOpen}
                       className={`mx-2 mb-2 py-2.5 rounded-lg font-semibold text-sm transition-all duration-300 active:scale-95 flex items-center justify-center gap-2 ${
-                        product.stock > 0 ? "bg-gradient-to-r from-red-500 to-orange-500 text-white hover:from-red-600 hover:to-orange-600" : "bg-gray-200 text-gray-500 cursor-not-allowed"
+                        product.stock > 0 && isOpen ? "bg-gradient-to-r from-red-500 to-orange-500 text-white hover:from-red-600 hover:to-orange-600" : "bg-gray-200 text-gray-500 cursor-not-allowed"
                       } disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
-                      {product.stock > 0 ? (isAddingToCart && selectedProduct?._id === product._id ? <><Loader2 size={16} className="animate-spin" />Adding...</> : "Add to Cart") : "Out of Stock"}
+                      {product.stock > 0 ? (
+                        !isOpen ? "Store Closed" : (isAddingToCart && selectedProduct?._id === product._id ? <><Loader2 size={16} className="animate-spin" />Adding...</> : "Add to Cart")
+                      ) : "Out of Stock"}
                     </button>
                   </div>
                 );
