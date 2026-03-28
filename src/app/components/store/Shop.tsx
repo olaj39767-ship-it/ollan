@@ -155,7 +155,7 @@ const { user, setUser } = useAuth();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [quantity, setQuantity] = useState<number>(1);
   const [selectedUnit, setSelectedUnit] = useState<"kg" | "congo">("kg");
-
+const nextSectionRef = useRef<HTMLDivElement | null>(null);
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo>({
     name: "", email: "", phone: "", prescription: null,
     deliveryOption: "", pickupLocation: "", deliveryAddress: "",
@@ -801,41 +801,57 @@ if (response.data.storeCreditApplied) {
 
       {/* RIGHT SIDE - User Card */}
       <div className="flex justify-center lg:justify-end">
-        <div className="backdrop-blur-xl bg-white/70 border border-white/50 shadow-2xl rounded-3xl p-6 w-full max-w-sm transition hover:scale-[1.02] duration-300">
-          
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 flex items-center justify-center bg-gradient-to-r from-red-500 to-orange-500 text-white rounded-2xl shadow-md">
-              <UserIcon size={22} />
-            </div>
+      <div className="backdrop-blur-xl bg-white/70 border border-white/50 shadow-2xl rounded-3xl p-6 w-full max-w-sm transition hover:scale-[1.02] duration-300">
+  
+  <div className="flex items-center gap-4">
+    <div className="w-12 h-12 flex items-center justify-center bg-gradient-to-r from-red-500 to-orange-500 text-white rounded-2xl shadow-md">
+      <UserIcon size={22} />
+    </div>
 
-            <div>
-              <p className="text-sm text-gray-500">Welcome back 👋   {displayName}</p>
-             
+    <div>
+      <p className="text-sm text-gray-500">
+        {isLoggedIn ? `Welcome back 👋 ${displayName}` : "You're not logged in"}
+      </p>
 
-              {isLoggedIn && availableStoreCredit && (
-                <p className="text-sm text-emerald-600 font-semibold mt-1">
-                  ₦{availableStoreCredit.toLocaleString()} Store Credit
-                </p>
-              )}
-            </div>
-          </div>
+      {isLoggedIn && availableStoreCredit && (
+        <p className="text-sm text-emerald-600 font-semibold mt-1">
+          ₦{availableStoreCredit.toLocaleString()} Store Credit
+        </p>
+      )}
+    </div>
+  </div>
 
-          {!isLoggedIn && (
-            <button
-              onClick={() => router.push("/pages/signin")}
-              className="mt-6 w-full bg-gray-900 text-white py-3 rounded-2xl font-medium hover:bg-black transition"
-            >
-              Login to continue
-            </button>
-          )}
-        </div>
+  {!isLoggedIn && (
+    <div className="mt-6 flex flex-col gap-3">
+      <button
+        onClick={() => router.push("/pages/signin")}
+        className="w-full bg-gray-900 text-white py-3 rounded-2xl font-medium hover:bg-black transition"
+      >
+        Log in
+      </button>
+
+    <button
+  onClick={() => {
+    nextSectionRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }}
+  className="w-full border border-gray-300 py-3 rounded-2xl font-medium hover:bg-gray-100 transition"
+>
+  Continue Shopping
+</button>
+    </div>
+  )}
+</div>
       </div>
 
     </div>
   </div>
 </section>
 
-        <div><StatsStrip /></div>
+        <div ref={nextSectionRef}>
+<StatsStrip /></div>
 
         {viewMode === "Pharmacy" && (
           <div className="mb-8">

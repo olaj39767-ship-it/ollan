@@ -93,12 +93,21 @@ const Navbar: React.FC = () => {
           {/* Desktop Right Section */}
           <div className="hidden lg:flex items-center space-x-4">
             {user && (
+              <>
+                    <Link
+                href="/pages/orders"
+                className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+              >
+                <ShoppingBag className="w-6 h-6 text-gray-600 hover:text-red-500" />
+              </Link>
               <Link
                 href="/pages/orders"
                 className="p-2 rounded-full hover:bg-gray-100 transition-colors"
               >
                 <ShoppingBag className="w-6 h-6 text-gray-600 hover:text-red-500" />
               </Link>
+              </>
+        
             )}
 
             {/* User Dropdown */}
@@ -137,6 +146,13 @@ const Navbar: React.FC = () => {
                     <>
                      
 
+                      <Link
+                        href="/pages/profile"
+                        className="flex items-center px-4 py-2 hover:bg-gray-50"
+                      >
+                        <Gift className="w-4 h-4 mr-2" />
+                       Profile
+                      </Link>
                       <Link
                         href="/pages/orders"
                         className="flex items-center px-4 py-2 hover:bg-gray-50"
@@ -232,6 +248,9 @@ const Navbar: React.FC = () => {
                 {user ? (
                   <>
                    
+                    <Link href="/pages/profile" className="block py-2">
+                      Profile
+                    </Link>
                     <Link href="/pages/orders" className="block py-2">
                       My Orders
                     </Link>
