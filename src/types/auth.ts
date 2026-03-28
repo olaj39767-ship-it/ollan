@@ -6,6 +6,8 @@ export interface User {
   role: string;
   iat?: number; // Optional: issued-at timestamp
   exp?: number; // Optional: expiration timestamp
+  referralCode: string;     // ← Added
+  storeCredit: number; 
 }
 
 export interface AuthResponse {

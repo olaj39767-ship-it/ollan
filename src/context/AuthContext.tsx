@@ -1,5 +1,3 @@
-
-
 "use client";
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '../types/auth';
@@ -16,47 +14,61 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
 
   // Function to check token expiration
-  const checkTokenExpiration = () => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      try {
-        const base64Url = token.split('.')[1];
-        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-        const jsonPayload = decodeURIComponent(
-          atob(base64)
-            .split('')
-            .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-            .join('')
-        );
-        const decoded: User = JSON.parse(jsonPayload);
-        console.log('Decoded JWT:', decoded);
+ const checkTokenExpiration = () => {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    if (user) setUser(null);
+    return;
+  }
 
-        if (decoded.exp && decoded.exp * 1000 < Date.now()) {
-          console.log('Token expired, exp:', new Date(decoded.exp * 1000).toLocaleString('en-US', { timeZone: 'Africa/Lagos' }));
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          setUser(null);
-        } else if (!user) {
-          // Only set user if not already set to avoid unnecessary updates
-          setUser(decoded);
-          localStorage.setItem('user', JSON.stringify(decoded)); // Store decoded user as fallback
-          console.log('User set from JWT:', decoded);
-        }
-      } catch (error) {
-        console.error('JWT decode error:', error);
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        setUser(null);
-      }
-    } else {
-      // No token, ensure user is cleared
-      if (user) {
-        localStorage.removeItem('user');
-        setUser(null);
-      }
-      console.log('No token found in localStorage');
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+
+    const decoded = JSON.parse(jsonPayload);
+
+    if (decoded.exp && decoded.exp * 1000 < Date.now()) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      setUser(null);
+      return;
     }
-  };
+
+    // Prefer full user from localStorage instead of rebuilding from JWT
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      const parsedUser = JSON.parse(storedUser);
+      if (!user || user.id !== parsedUser.id) {
+        setUser(parsedUser);
+        console.log('User loaded from localStorage:', parsedUser);
+      }
+      return;
+    }
+
+    // Fallback (rare)
+    const userData: User = {
+      id: decoded.id,
+      name: decoded.name,
+      email: decoded.email,
+      role: decoded.role,
+      referralCode: decoded.referralCode,
+      storeCredit: decoded.storeCredit,
+    };
+    setUser(userData);
+    localStorage.setItem('user', JSON.stringify(userData));
+  } catch (error) {
+    console.error('JWT decode error:', error);
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setUser(null);
+  }
+};
 
   useEffect(() => {
     // Initial check on mount

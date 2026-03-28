@@ -110,85 +110,95 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
     return newErrors;
   };
 
- const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrors({});
-    setIsSubmitting(true);
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setErrors({});
+  setIsSubmitting(true);
 
-    const validationErrors = validateForm();
-    if (Object.keys(validationErrors).length > 0) {
-      setErrors(validationErrors);
-      setIsSubmitting(false);
-      return;
-    }
+  const validationErrors = validateForm();
+  if (Object.keys(validationErrors).length > 0) {
+    setErrors(validationErrors);
+    setIsSubmitting(false);
+    return;
+  }
 
-    setIsLoading(true);
+  setIsLoading(true);
 
-    try {
-      if (type === "signup") {
-        const res = await fetch("https://ollanback.vercel.app/api/auth/signup", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: formData.name,
-            email: formData.email,
-            password: formData.password,
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.message || "Signup failed");
-        }
-        showNotification("success", "Signup successful! Please check your email for the verification code.");
-        setTimeout(() => router.push(`/pages/verify-email-otp?email=${encodeURIComponent(formData.email)}`), 2000);
-      } else if (type === "signin") {
-        const res = await fetch("https://ollanbackend-jr1d3g.fly.dev/api/auth/signin", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: formData.email,
-            password: formData.password,
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          if (data.message === "Please verify your email before signing in.") {
-            setErrors({ email: data.message });
-          } else {
-            throw new Error(data.message || "Signin failed");
-          }
-        } else {
-          console.log("Signin response:", JSON.stringify(data, null, 2));
-          if (data.token && data.user) {
-            localStorage.setItem("token", data.token);
-            localStorage.setItem("user", JSON.stringify(data.user));
-            setUser(data.user);
-            showNotification("success", "Welcome back!");
-            setTimeout(() => router.push("/"), 1000);
-          }
-        }
+  try {
+    if (type === "signup") {
+      const res = await fetch("https://ollanback.vercel.app/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Signup failed");
       }
-    }catch (error) {
-  // Type guard to ensure error is an Error object
-  if (error instanceof Error) {
-    console.error("Auth error:", { message: error.message });
-    const errorMessage = error.message || "Something went wrong. Please try again.";
-    showNotification("error", errorMessage);
-    if (error.message !== "Please verify your email before signing in.") {
+
+      showNotification("success", "Signup successful! Please check your email for the verification code.");
+      setTimeout(() => router.push(`/pages/verify-email-otp?email=${encodeURIComponent(formData.email)}`), 2000);
+    } 
+    else if (type === "signin") {
+      const res = await fetch("https://ollanback.vercel.app/api/auth/signin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: formData.email,
+          password: formData.password,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (data.message === "Please verify your email before signing in.") {
+          setErrors({ email: data.message });
+        } else {
+          throw new Error(data.message || "Signin failed");
+        }
+        return;   // ← Important: stop here on error
+      }
+
+      // ✅ This is the important part for your issue
+      console.log("Signin response:", JSON.stringify(data, null, 2));
+
+      if (data.token && data.user) {
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("user", JSON.stringify(data.user));
+        
+        setUser(data.user);                    // ← This ensures Context gets full user
+
+        showNotification("success", "Welcome back!");
+        setTimeout(() => router.push("/"), 1000);
+      } else {
+        throw new Error("Invalid response from server: missing token or user");
+      }
+    }
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error("Auth error:", { message: error.message });
+      const errorMessage = error.message || "Something went wrong. Please try again.";
+      showNotification("error", errorMessage);
+      
+      if (error.message !== "Please verify your email before signing in.") {
+        setErrors({ email: errorMessage });
+      }
+    } else {
+      console.error("Auth error:", { message: String(error) });
+      const errorMessage = String(error) || "Something went wrong. Please try again.";
+      showNotification("error", errorMessage);
       setErrors({ email: errorMessage });
     }
-  } else {
-    // Fallback for non-Error objects (e.g., string or other thrown types)
-    console.error("Auth error:", { message: String(error) });
-    const errorMessage = String(error) || "Something went wrong. Please try again.";
-    showNotification("error", errorMessage);
-    setErrors({ email: errorMessage });
+  } finally {
+    setIsLoading(false);
+    setIsSubmitting(false);
   }
-} finally {
-  setIsLoading(false);
-  setIsSubmitting(false);
-}
-  };
+};
 
   const getPasswordStrength = (password: string): { strength: number; label: string; color: string } => {
     if (!password) return { strength: 0, label: "", color: "" };
@@ -361,7 +371,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
     <button
       onClick={async () => {
         try {
-          const res = await fetch("https://ollanbackend-jr1d3g.fly.dev/api/auth/resend-verification", {
+          const res = await fetch("https://ollanback.vercel.app/api/auth/resend-verification", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email: formData.email }),

@@ -6,6 +6,8 @@ interface User {
   name: string;
   email: string;
   role: "user" | "admin";
+  referralCode: string;     // ← Added
+  storeCredit: number;      // ← Added
 }
 
 interface AuthState {
@@ -22,7 +24,7 @@ interface AuthState {
   clearPendingEmail: () => void;
   setResetEmail: (email: string) => void;
   clearResetEmail: () => void;
-  updateUser: (updates: Partial<Pick<User, "name" | "email">>) => void;
+  updateUser: (updates: Partial<Pick<User, "name" | "email" | "referralCode" | "storeCredit">>) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -38,7 +40,13 @@ export const useAuthStore = create<AuthState>()(
         set({ user, token, isAuthenticated: true }),
 
       logout: () =>
-        set({ user: null, token: null, isAuthenticated: false, pendingEmail: null, resetEmail: null }),
+        set({ 
+          user: null, 
+          token: null, 
+          isAuthenticated: false, 
+          pendingEmail: null, 
+          resetEmail: null 
+        }),
 
       setPendingEmail: (email) => set({ pendingEmail: email }),
 

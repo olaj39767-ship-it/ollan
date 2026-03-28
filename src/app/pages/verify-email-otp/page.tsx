@@ -39,7 +39,7 @@ const VerifyEmailOTP = () => {
     }
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://ollanbackend-jr1d3g.fly.dev";
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://ollanback.vercel.app";
       const res = await fetch(`${apiUrl}/api/auth/verify-email`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
