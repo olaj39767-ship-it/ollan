@@ -38,7 +38,7 @@ const UploadPrescriptionModal: React.FC<UploadPrescriptionModalProps> = ({ isOpe
   const [dragActive, setDragActive] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Handle clicks outside the modal to close it
+  // Close modal when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
@@ -50,18 +50,14 @@ const UploadPrescriptionModal: React.FC<UploadPrescriptionModalProps> = ({ isOpe
       document.addEventListener('mousedown', handleClickOutside);
     }
 
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen, onClose]);
 
-  // Clean up image previews to prevent memory leaks
+  // Clean up previews
   useEffect(() => {
     return () => {
       files.forEach((uploadedFile) => {
-        if (uploadedFile.preview) {
-          URL.revokeObjectURL(uploadedFile.preview);
-        }
+        if (uploadedFile.preview) URL.revokeObjectURL(uploadedFile.preview);
       });
     };
   }, [files]);
@@ -69,35 +65,36 @@ const UploadPrescriptionModal: React.FC<UploadPrescriptionModalProps> = ({ isOpe
   const handleFileChange = (selectedFiles: FileList | null) => {
     setError(null);
     setSuccess(false);
-    if (selectedFiles) {
-      const validFiles: UploadedFile[] = [];
-      const allowedTypes = [
-        'image/jpeg',
-        'image/png',
-        'application/pdf',
-        'application/msword',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      ];
-      const maxSize = 5 * 1024 * 1024; // 5MB
 
-      Array.from(selectedFiles).forEach((file) => {
-        if (!allowedTypes.includes(file.type)) {
-          setError('Only JPEG, PNG, PDF, and DOCX files are allowed');
-          return;
-        }
-        if (file.size > maxSize) {
-          setError('File size must be less than 5MB');
-          return;
-        }
-        validFiles.push({
-          file,
-          preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
-        });
-      });
+    if (!selectedFiles) return;
 
-      if (validFiles.length > 0) {
-        setFiles((prev) => [...prev, ...validFiles]);
+    const validFiles: UploadedFile[] = [];
+    const allowedTypes = [
+      'image/jpeg',
+      'image/png',
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+    const maxSize = 5 * 1024 * 1024; // 5MB
+
+    Array.from(selectedFiles).forEach((file) => {
+      if (!allowedTypes.includes(file.type)) {
+        setError('Only JPEG, PNG, PDF, and DOCX files are allowed');
+        return;
       }
+      if (file.size > maxSize) {
+        setError('File size must be less than 5MB');
+        return;
+      }
+      validFiles.push({
+        file,
+        preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
+      });
+    });
+
+    if (validFiles.length > 0) {
+      setFiles((prev) => [...prev, ...validFiles]);
     }
   };
 
@@ -112,17 +109,13 @@ const UploadPrescriptionModal: React.FC<UploadPrescriptionModalProps> = ({ isOpe
     setDragActive(true);
   };
 
-  const handleDragLeave = () => {
-    setDragActive(false);
-  };
+  const handleDragLeave = () => setDragActive(false);
 
   const handleRemoveFile = (index: number) => {
     setFiles((prev) => {
       const newFiles = [...prev];
-      const removedFile = newFiles.splice(index, 1)[0];
-      if (removedFile.preview) {
-        URL.revokeObjectURL(removedFile.preview);
-      }
+      const removed = newFiles.splice(index, 1)[0];
+      if (removed.preview) URL.revokeObjectURL(removed.preview);
       return newFiles;
     });
   };
@@ -132,7 +125,7 @@ const UploadPrescriptionModal: React.FC<UploadPrescriptionModalProps> = ({ isOpe
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const validateForm = () => {
+  const validateForm = (): string | null => {
     if (!formData.name.trim()) return 'Name is required';
     if (!formData.email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) return 'Valid email is required';
     if (!formData.phone.match(/^\+?\d{10,15}$/)) return 'Valid phone number is required';
@@ -140,8 +133,7 @@ const UploadPrescriptionModal: React.FC<UploadPrescriptionModalProps> = ({ isOpe
     return null;
   };
 
- // components/UploadPrescriptionModal.tsx
-const handleUpload = async () => {
+ const handleUpload = async () => {
   const formError = validateForm();
   if (formError) {
     setError(formError);
@@ -158,27 +150,45 @@ const handleUpload = async () => {
 
   try {
     const formDataToSend = new FormData();
+
     formDataToSend.append('name', formData.name);
     formDataToSend.append('email', formData.email);
     formDataToSend.append('phone', formData.phone);
     formDataToSend.append('location', formData.location);
+
+    // Send all selected files
     files.forEach((uploadedFile) => {
-      formDataToSend.append('files', uploadedFile.file);
+      formDataToSend.append('prescription', uploadedFile.file);
     });
 
-    const response = await axios.post('https://ollanback.vercel.app/api/orders/send-prescription', formDataToSend, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    const response = await axios.post(
+      'https://ollanback.vercel.app/api/orders/upload-prescription',
+      formDataToSend,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      }
+    );
 
-    if (response.status === 200) {
+    if (response.data?.success) {
       setSuccess(true);
-      setFiles([]);
-      setFormData({ name: '', email: '', phone: '', location: '' });
+      
+      // Reset form after successful upload
+      setTimeout(() => {
+        setFiles([]);
+        setFormData({ name: '', email: '', phone: '', location: '' });
+        setSuccess(false);
+        onClose();                    // Auto close modal (recommended UX)
+      }, 2500);
+
     } else {
-      setError('Failed to upload files. Please try again.');
+      setError('Upload failed. Please try again.');
     }
-  } catch (err) {
-    setError('Failed to upload files. Please try again.');
+  } catch (err: any) {
+    console.error(err);
+    setError(
+      err.response?.data?.message || 
+      'Failed to upload files. Please check your connection and try again.'
+    );
   } finally {
     setUploading(false);
   }
@@ -250,12 +260,12 @@ const handleUpload = async () => {
               value={formData.location}
               onChange={handleInputChange}
               className="w-full p-2 border rounded-lg focus:ring-red-500 focus:border-red-500"
-              placeholder="Enter your location"
+              placeholder="Enter your location lol"
             />
           </div>
         </div>
 
-        {/* Drag and Drop Area */}
+        {/* Drag & Drop */}
         <div
           className={`border-2 border-dashed rounded-lg p-6 mb-6 text-center ${
             dragActive ? 'border-red-500 bg-red-50' : 'border-gray-300 bg-gray-50'
@@ -287,10 +297,13 @@ const handleUpload = async () => {
         {/* File Previews */}
         {files.length > 0 && (
           <div className="mb-6 max-h-64 overflow-y-auto">
-            <h4 className="text-sm font-semibold text-gray-700 mb-2">Uploaded Files:</h4>
+            <h4 className="text-sm font-semibold text-gray-700 mb-2">Selected Files:</h4>
             <div className="grid gap-4">
               {files.map((uploadedFile, index) => (
-                <div key={index} className="flex items-center justify-between bg-gray-100 p-3 rounded-lg">
+                <div
+                  key={index}
+                  className="flex items-center justify-between bg-gray-100 p-3 rounded-lg"
+                >
                   <div className="flex items-center space-x-3">
                     {uploadedFile.preview ? (
                       <Image
@@ -320,7 +333,7 @@ const handleUpload = async () => {
           </div>
         )}
 
-        {/* Error Message */}
+        {/* Messages */}
         {error && (
           <div className="bg-red-50 text-red-700 p-3 rounded-lg mb-4 flex items-center space-x-2">
             <X className="w-5 h-5" />
@@ -328,11 +341,10 @@ const handleUpload = async () => {
           </div>
         )}
 
-        {/* Success Message */}
         {success && (
           <div className="bg-green-50 text-green-700 p-3 rounded-lg mb-4 flex items-center space-x-2">
             <Check className="w-5 h-5" />
-            <p>Prescription uploaded successfully! Our agents will reach out to you shortly.</p>
+            <p>Prescription uploaded successfully! Our agents will reach out shortly.</p>
           </div>
         )}
 
@@ -341,7 +353,9 @@ const handleUpload = async () => {
           onClick={handleUpload}
           disabled={uploading}
           className={`w-full flex items-center justify-center space-x-2 px-6 py-3 rounded-lg font-semibold transition-colors ${
-            uploading ? 'bg-gray-300 cursor-not-allowed' : 'bg-red-500 text-white hover:bg-red-600'
+            uploading
+              ? 'bg-gray-300 cursor-not-allowed'
+              : 'bg-red-500 text-white hover:bg-red-600'
           }`}
         >
           {uploading ? (
