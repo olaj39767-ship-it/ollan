@@ -2,7 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Calendar, Search, ZoomIn, ZoomOut, RotateCcw, X, FileText, Download, SlidersHorizontal, ChevronRight } from 'lucide-react';
+import {
+  Calendar, Search, ZoomIn, ZoomOut, RotateCcw, X,
+  FileText, Download, SlidersHorizontal, ChevronRight,
+  Copy, Phone, Check,
+} from 'lucide-react';
 import Image from 'next/image';
 import { format } from 'date-fns';
 
@@ -31,6 +35,10 @@ const AllPrescriptions: React.FC = () => {
   const [selectedPrescription, setSelectedPrescription] = useState<Prescription | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [filtersVisible, setFiltersVisible] = useState(false);
+
+  // Per-card and modal copy state
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [modalCopied, setModalCopied] = useState(false);
 
   const API_URL = 'https://ollanback.vercel.app/api/orders/prescriptions';
 
@@ -88,6 +96,24 @@ const AllPrescriptions: React.FC = () => {
   const resetZoom = () => setZoomLevel(1);
   const hasActiveFilters = startDate || endDate || searchTerm.trim();
 
+  const copyToClipboard = (text: string, id: string, isModal = false) => {
+    navigator.clipboard.writeText(text).catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    });
+    if (isModal) {
+      setModalCopied(true);
+      setTimeout(() => setModalCopied(false), 1800);
+    } else {
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 1800);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#fafafa] flex items-center justify-center">
@@ -117,7 +143,7 @@ const AllPrescriptions: React.FC = () => {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap');
 
         .rx-root * { box-sizing: border-box; }
         .rx-root { font-family: 'DM Sans', sans-serif; }
@@ -258,14 +284,82 @@ const AllPrescriptions: React.FC = () => {
           margin: 0 auto 16px;
         }
 
-        .rx-stat {
-          background: #fff;
+        /* ── Phone row on card ── */
+        .rx-phone-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          background: #fafafa;
           border: 1.5px solid #f0f0f0;
-          border-radius: 16px;
-          padding: 16px 24px;
-          display: flex; align-items: center; gap-12px;
-          min-width: 130px;
+          border-radius: 10px;
+          padding: 7px 12px;
+          margin-top: 8px;
+          transition: border-color 0.15s;
         }
+        .rx-phone-row:hover { border-color: #e0e0e0; }
+        .rx-phone-num {
+          font-size: 14px;
+          font-weight: 700;
+          color: #111;
+          letter-spacing: 0.02em;
+          flex: 1;
+          user-select: text;
+        }
+        .rx-copy-btn {
+          border: none;
+          background: none;
+          cursor: pointer;
+          color: #bbb;
+          padding: 2px;
+          display: flex;
+          align-items: center;
+          border-radius: 6px;
+          transition: color 0.15s, background 0.15s;
+          flex-shrink: 0;
+        }
+        .rx-copy-btn:hover { color: #dc2626; background: #fff1f1; }
+        .rx-copy-btn.copied { color: #16a34a; }
+
+        /* ── Phone overlay on modal image ── */
+        .rx-phone-overlay {
+          position: absolute;
+          bottom: 16px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: rgba(10, 5, 5, 0.70);
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
+          color: #fff;
+          border-radius: 14px;
+          padding: 9px 18px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          white-space: nowrap;
+          z-index: 10;
+          border: 1px solid rgba(255,255,255,0.08);
+        }
+        .rx-phone-overlay .rx-phone-num {
+          color: #fff;
+          font-size: 15px;
+        }
+        .rx-phone-overlay .rx-copy-btn {
+          color: rgba(255,255,255,0.5);
+        }
+        .rx-phone-overlay .rx-copy-btn:hover {
+          color: #fff;
+          background: rgba(255,255,255,0.12);
+        }
+        .rx-phone-overlay .rx-copy-btn.copied {
+          color: #4ade80;
+        }
+        .rx-copied-tag {
+          font-size: 11px;
+          font-weight: 600;
+          color: #16a34a;
+          animation: fadeIn 0.15s ease;
+        }
+        .rx-copied-tag.light { color: #4ade80; }
       `}</style>
 
       <div className="rx-root" style={{ minHeight: '100vh', background: '#fafafa', padding: '32px 24px' }}>
@@ -351,7 +445,6 @@ const AllPrescriptions: React.FC = () => {
 
           {/* Search + Filter Bar */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', marginBottom: 24 }}>
-            {/* Search */}
             <div style={{ position: 'relative', flexGrow: 1, maxWidth: 360 }}>
               <Search
                 size={16}
@@ -367,7 +460,6 @@ const AllPrescriptions: React.FC = () => {
               />
             </div>
 
-            {/* Filter toggle */}
             <button
               className={`rx-filter-toggle ${filtersVisible ? 'active' : ''}`}
               onClick={() => setFiltersVisible(!filtersVisible)}
@@ -509,22 +601,39 @@ const AllPrescriptions: React.FC = () => {
 
                   {/* Info */}
                   <div style={{ padding: '16px 18px 18px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
                       <p style={{ fontWeight: 600, color: '#111', fontSize: 15, margin: 0, lineHeight: 1.3 }}>
                         {pres.name}
                       </p>
                       <ChevronRight size={16} style={{ color: '#ddd', flexShrink: 0 }} />
                     </div>
-                    <p style={{ fontSize: 12, color: '#aaa', margin: '0 0 8px', lineHeight: 1.4 }}>{pres.email}</p>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <p style={{ fontSize: 11, color: '#ccc', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '80%' }}>
-                        {pres.originalName}
-                      </p>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <p style={{ fontSize: 11, color: '#ccc', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '80%' }}>
-                        {pres.phone}
-                      </p>
+
+                    <p style={{ fontSize: 12, color: '#aaa', margin: '0 0 4px', lineHeight: 1.4 }}>{pres.email}</p>
+
+                    <p style={{ fontSize: 11, color: '#ccc', margin: '0 0 6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {pres.originalName}
+                    </p>
+
+                    {/* ── Bold copyable phone row ── */}
+                    <div
+                      className="rx-phone-row"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Phone size={13} style={{ color: '#bbb', flexShrink: 0 }} />
+                      <span className="rx-phone-num">{pres.phone}</span>
+                      {copiedId === pres._id ? (
+                        <span className="rx-copied-tag">Copied!</span>
+                      ) : null}
+                      <button
+                        className={`rx-copy-btn${copiedId === pres._id ? ' copied' : ''}`}
+                        onClick={() => copyToClipboard(pres.phone, pres._id)}
+                        title="Copy phone number"
+                      >
+                        {copiedId === pres._id
+                          ? <Check size={14} />
+                          : <Copy size={14} />
+                        }
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -578,8 +687,14 @@ const AllPrescriptions: React.FC = () => {
                   color: '#888',
                   transition: 'background 0.15s, border-color 0.15s'
                 }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = '#fff1f1'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#fca5a5'; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = '#fff'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#ececec'; }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = '#fff1f1';
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = '#fca5a5';
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = '#fff';
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = '#ececec';
+                }}
               >
                 <X size={16} />
               </button>
@@ -611,6 +726,20 @@ const AllPrescriptions: React.FC = () => {
                   title="PDF Preview"
                 />
               )}
+
+              {/* ── Phone number overlay badge ── */}
+              <div className="rx-phone-overlay">
+                <Phone size={14} color="rgba(255,255,255,0.6)" />
+                <span className="rx-phone-num">{selectedPrescription.phone}</span>
+                {modalCopied && <span className="rx-copied-tag light">Copied!</span>}
+                <button
+                  className={`rx-copy-btn${modalCopied ? ' copied' : ''}`}
+                  onClick={() => copyToClipboard(selectedPrescription.phone, selectedPrescription._id, true)}
+                  title="Copy phone number"
+                >
+                  {modalCopied ? <Check size={14} /> : <Copy size={14} />}
+                </button>
+              </div>
             </div>
 
             {/* Modal Footer */}
@@ -657,8 +786,14 @@ const AllPrescriptions: React.FC = () => {
                     transition: 'background 0.15s, border-color 0.15s',
                     fontFamily: "'DM Sans', sans-serif"
                   }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = '#fff5f5'; (e.currentTarget as HTMLAnchorElement).style.borderColor = '#fca5a5'; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = '#fff'; (e.currentTarget as HTMLAnchorElement).style.borderColor = '#ececec'; }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLAnchorElement).style.background = '#fff5f5';
+                    (e.currentTarget as HTMLAnchorElement).style.borderColor = '#fca5a5';
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLAnchorElement).style.background = '#fff';
+                    (e.currentTarget as HTMLAnchorElement).style.borderColor = '#ececec';
+                  }}
                 >
                   <Download size={16} />
                   Download
