@@ -521,6 +521,11 @@ const AllPrescriptions: React.FC = () => {
                         {pres.originalName}
                       </p>
                     </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <p style={{ fontSize: 11, color: '#ccc', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '80%' }}>
+                        {pres.phone}
+                      </p>
+                    </div>
                   </div>
                 </div>
               ))}
