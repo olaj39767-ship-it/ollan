@@ -115,7 +115,7 @@ export default function Profile() {
           </div>
 
           {/* Referral Code */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+          {/* <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
             <p className="text-gray-500 text-sm mb-2">Your Referral Code</p>
 
             <div className="flex items-center gap-3 bg-white border rounded-lg p-4">
@@ -135,7 +135,7 @@ export default function Profile() {
             <p className="text-sm text-gray-500 mt-3">
               Share this code with friends and earn 3% store credit when they order!
             </p>
-          </div>
+          </div> */}
         </div>
 
         {/* Logout Button */}
