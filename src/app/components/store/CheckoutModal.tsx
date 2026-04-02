@@ -361,7 +361,7 @@ const handleFlutterwavePayment = useCallback(async () => {
 
     const data = await res.json();
     backendOrderId = data.orderId;
-    payableAmount = data.finalPayable;
+    payableAmount =  finalTotal;
 
     // Keep customerInfo in sync with what backend calculated
     setCustomerInfo((p) => ({ ...p, orderId: backendOrderId }));
