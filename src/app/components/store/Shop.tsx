@@ -161,7 +161,7 @@ const isWithinBusinessHours = (): boolean => {
   } else {
     // Weekday: 8am (8:00) to 10pm (22:00)
     const weekdayStart = 8 * 60; // 8:00 AM
-    const weekdayEnd = 19 * 60; // 10:00 PM
+    const weekdayEnd = 22 * 60; // 10:00 PM
     return currentTimeInMinutes >= weekdayStart && currentTimeInMinutes < weekdayEnd;
   }
 };
