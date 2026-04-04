@@ -164,7 +164,7 @@ const Navbar: React.FC = () => {
                       {user.role === "admin" && (
                         <>
                           <Link
-                            href="/admin/update-product"
+                            href="/admin/seller"
                             className="flex items-center px-4 py-2 hover:bg-gray-50"
                           >
                             <ShoppingBag className="w-4 h-4 mr-2" />

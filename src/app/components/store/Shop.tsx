@@ -146,22 +146,20 @@ const pharmacyCategories = [
 // Business Hours Helper Functions
 const isWithinBusinessHours = (): boolean => {
   const now = new Date();
-  const day = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  const day = now.getDay();
   const hours = now.getHours();
   const minutes = now.getMinutes();
   const currentTimeInMinutes = hours * 60 + minutes;
 
   const isWeekend = day === 0 || day === 6;
-  
+
   if (isWeekend) {
-    // Weekend: 8am (8:00) to 6pm (18:00)
-    const weekendStart = 8 * 60; // 8:00 AM
-    const weekendEnd = 18 * 60; // 6:00 PM
+    const weekendStart = 8 * 60;
+    const weekendEnd = 18 * 60;
     return currentTimeInMinutes >= weekendStart && currentTimeInMinutes < weekendEnd;
   } else {
-    // Weekday: 8am (8:00) to 10pm (22:00)
-    const weekdayStart = 8 * 60; // 8:00 AM
-    const weekdayEnd = 22 * 60; // 10:00 PM
+    const weekdayStart = 8 * 60;
+    const weekdayEnd = 22 * 60;
     return currentTimeInMinutes >= weekdayStart && currentTimeInMinutes < weekdayEnd;
   }
 };
@@ -170,7 +168,7 @@ const getBusinessStatusMessage = (): string => {
   const now = new Date();
   const day = now.getDay();
   const isWeekend = day === 0 || day === 6;
-  
+
   if (isWeekend) {
     return "⏰ Open: Weekends 8am - 6pm";
   } else {
@@ -225,14 +223,14 @@ const PharmacyApp: React.FC = () => {
       setIsOpen(isWithinBusinessHours());
       setBusinessStatusMessage(getBusinessStatusMessage());
     };
-    
+
     checkBusinessHours();
-    const interval = setInterval(checkBusinessHours, 60000); // Check every minute
-    
+    const interval = setInterval(checkBusinessHours, 60000);
+
     return () => clearInterval(interval);
   }, []);
 
-  // Open quantity modal
+  // Open quantity modal — default to "congo" if product supports it
   const openQuantityModal = (product: Product) => {
     if (!isOpen) {
       alert(`Sorry, we're currently closed. ${businessStatusMessage}`);
@@ -240,7 +238,8 @@ const PharmacyApp: React.FC = () => {
     }
     setSelectedProduct(product);
     setQuantity(1);
-    setSelectedUnit("kg");
+    const congoKg = getCongoKg(product.name);
+    setSelectedUnit(congoKg !== null ? "congo" : "kg");
     setIsQuantityModalOpen(true);
   };
 
@@ -252,10 +251,9 @@ const PharmacyApp: React.FC = () => {
     }));
   }, [user]);
 
-  // Add this useEffect in PharmacyApp, after the existing useEffects:
   useEffect(() => {
     if (!isLoggedIn) return;
-    
+
     const fetchFreshCredit = async () => {
       try {
         const { data } = await api.get("/api/user/me");
@@ -271,7 +269,7 @@ const PharmacyApp: React.FC = () => {
     };
 
     fetchFreshCredit();
-  }, [isLoggedIn]); // runs once when logged-in status is known
+  }, [isLoggedIn]);
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -299,7 +297,7 @@ const PharmacyApp: React.FC = () => {
     fetchProducts();
   }, []);
 
-  
+
   const availableStoreCredit = user?.storeCredit || 0;
   const displayName = user?.name ? user.name.split(" ")[0] : "Guest";
 
@@ -363,7 +361,7 @@ const PharmacyApp: React.FC = () => {
       setSelectedUnit("kg");
       return;
     }
-    
+
     if (!selectedProduct || quantity <= 0 || isAddingToCart) return;
     setIsAddingToCart(true);
 
@@ -417,7 +415,7 @@ const PharmacyApp: React.FC = () => {
       alert(`Sorry, we're currently closed. ${businessStatusMessage}`);
       return;
     }
-    
+
     setIsSubmittingOrder(true);
     setIsProcessing(true);
 
@@ -426,7 +424,6 @@ const PharmacyApp: React.FC = () => {
       const estimatedDeliveryTime = calculateDeliveryTime(orderTime, info.deliveryOption);
       setEstimatedDelivery(estimatedDeliveryTime);
 
-      // ✅ Use info.storeCreditUsed which is computed and passed in from CheckoutModal
       const storeCreditToUse = info.storeCreditUsed ?? 0;
 
       const payload = {
@@ -449,10 +446,11 @@ const PharmacyApp: React.FC = () => {
         })),
         prescriptionUrl: "",
         referralCode: info.referralCode || undefined,
-        storeCreditApplied: useStoreCredit, // boolean — backend reads the real amount from DB
+        storeCreditApplied: useStoreCredit,
       };
 
       const response = await api.post("/api/orders/create", payload);
+
       if (response.data.storeCreditApplied) {
         try {
           const { data: freshUser } = await api.get("/api/users/me");
@@ -462,14 +460,15 @@ const PharmacyApp: React.FC = () => {
             email: freshUser.email,
             role: freshUser.role,
             referralCode: freshUser.referralCode,
-            storeCredit: freshUser.storeCredit,  // ← fresh from DB
+            storeCredit: freshUser.storeCredit,
           };
-          setUser(updated);                                    // update context
-          localStorage.setItem('user', JSON.stringify(updated)); // sync localStorage
+          setUser(updated);
+          localStorage.setItem("user", JSON.stringify(updated));
         } catch (err) {
-          console.error('Failed to refresh user:', err);
+          console.error("Failed to refresh user:", err);
         }
       }
+
       if (storeCreditToUse > 0) {
         alert(`✅ Order placed!\n\n₦${storeCreditToUse.toLocaleString()} store credit deducted.`);
       } else {
@@ -490,7 +489,7 @@ const PharmacyApp: React.FC = () => {
     }
   };
 
-  // Quantity Modal (your original)
+  // Quantity Modal
   const QuantityModal = () => {
     const modalRef = useRef<HTMLDivElement>(null);
 
@@ -548,7 +547,10 @@ const PharmacyApp: React.FC = () => {
               <p className="text-sm text-gray-600 mb-3 line-clamp-2">{selectedProduct.description}</p>
               <div className="flex items-baseline gap-2">
                 <p className="text-2xl font-bold text-red-500">₦{effectiveUnitPrice.toLocaleString()}</p>
-                <span className="text-sm text-gray-500">per {selectedUnit === "congo" ? "congo" : "kg"}</span>
+                {/* Only show "per unit" label for products that support congo */}
+                {supportsCongo && (
+                  <span className="text-sm text-gray-500">per {selectedUnit === "congo" ? "congo" : "kg"}</span>
+                )}
               </div>
               {selectedProduct.stock > 0 && (
                 <div className="flex items-center gap-2 mt-2">
@@ -563,8 +565,8 @@ const PharmacyApp: React.FC = () => {
             <div className="mb-6">
               <p className="text-sm text-gray-600 mb-2">Measure by:</p>
               <div className="flex gap-2 bg-gray-100 p-1 rounded-xl">
-                <button onClick={() => setSelectedUnit("kg")} className={`flex-1 py-2 rounded-lg font-semibold text-sm transition-all duration-200 ${selectedUnit === "kg" ? "bg-white text-gray-900 shadow" : "text-gray-500 hover:text-gray-700"}`} disabled={isAddingToCart}>Kg</button>
                 <button onClick={() => setSelectedUnit("congo")} className={`flex-1 py-2 rounded-lg font-semibold text-sm transition-all duration-200 ${selectedUnit === "congo" ? "bg-gradient-to-r from-red-500 to-orange-500 text-white shadow" : "text-gray-500 hover:text-gray-700"}`} disabled={isAddingToCart}>Congo</button>
+                <button onClick={() => setSelectedUnit("kg")} className={`flex-1 py-2 rounded-lg font-semibold text-sm transition-all duration-200 ${selectedUnit === "kg" ? "bg-white text-gray-900 shadow" : "text-gray-500 hover:text-gray-700"}`} disabled={isAddingToCart}>Kg</button>
               </div>
             </div>
           )}
@@ -577,7 +579,6 @@ const PharmacyApp: React.FC = () => {
               <button onClick={() => setQuantity(quantity + 1)} className="rounded-full bg-gradient-to-r from-red-500 to-orange-500 p-3 text-white hover:from-red-600 hover:to-orange-600 transition-all duration-200 active:scale-95 shadow-lg shadow-red-500/25 disabled:opacity-50 disabled:cursor-not-allowed" disabled={isAddingToCart}><Plus size={20} /></button>
             </div>
 
-            {/* Bundle and discount UI - kept as original */}
             {bundleInfo.hasBundle && (
               <div className="mt-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl">
                 <div className="flex items-center gap-2 mb-2">
@@ -608,7 +609,7 @@ const PharmacyApp: React.FC = () => {
     );
   };
 
-  // Cart Modal (your original)
+  // Cart Modal
   const CartModal = () => {
     const modalRef = useRef<HTMLDivElement>(null);
 
@@ -719,13 +720,13 @@ const PharmacyApp: React.FC = () => {
                   </div>
 
                   <button
-                    onClick={() => { 
+                    onClick={() => {
                       if (!isOpen) {
                         alert(`Sorry, we're currently closed. ${businessStatusMessage}`);
                         return;
                       }
-                      setIsCartOpen(false); 
-                      setIsCheckoutOpen(true); 
+                      setIsCartOpen(false);
+                      setIsCheckoutOpen(true);
                     }}
                     disabled={cart.length === 0 || !isOpen}
                     className="w-full bg-gradient-to-r from-red-500 to-orange-500 text-white py-4 rounded-xl font-bold hover:from-red-600 hover:to-orange-600 active:scale-[0.98] transition-all duration-200 shadow-lg shadow-red-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -741,15 +742,15 @@ const PharmacyApp: React.FC = () => {
     );
   };
 
-const OrderCompleteModal = ({ setOrderComplete }: { setOrderComplete: (value: boolean) => void }) => {
+  const OrderCompleteModal = ({ setOrderComplete }: { setOrderComplete: (value: boolean) => void }) => {
     if (!orderComplete) return null;
-    
-   const handleWhatsAppRedirect = () => {
-        const phoneNumber = "09040788398";
-        const whatsappUrl = `https://wa.me/${phoneNumber}`;
-        window.open(whatsappUrl, '_blank');
+
+    const handleWhatsAppRedirect = () => {
+      const phoneNumber = "09040788398";
+      const whatsappUrl = `https://wa.me/${phoneNumber}`;
+      window.open(whatsappUrl, '_blank');
     };
-    
+
     return (
       <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl max-w-md w-full p-8 text-center shadow-2xl">
@@ -769,13 +770,13 @@ const OrderCompleteModal = ({ setOrderComplete }: { setOrderComplete: (value: bo
             </div>
           </div>
           <div className="flex gap-4">
-            <button 
+            <button
               onClick={() => setOrderComplete(false)}
               className="flex-1 bg-gradient-to-r from-gray-100 to-gray-200 text-gray-900 py-3.5 rounded-xl font-semibold hover:from-gray-200 hover:to-gray-300 active:scale-[0.98] transition-all duration-200"
             >
-           close
+              close
             </button>
-            <button 
+            <button
               onClick={handleWhatsAppRedirect}
               className="flex-1 bg-gradient-to-r from-green-500 to-emerald-500 text-white py-3.5 rounded-xl font-semibold hover:from-green-600 hover:to-emerald-600 active:scale-[0.98] transition-all duration-200 shadow-lg shadow-green-500/25"
             >
@@ -785,7 +786,7 @@ const OrderCompleteModal = ({ setOrderComplete }: { setOrderComplete: (value: bo
         </div>
       </div>
     );
-};
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
@@ -798,9 +799,7 @@ const OrderCompleteModal = ({ setOrderComplete }: { setOrderComplete: (value: bo
               </div>
             </Link>
 
-        
-
-            {/* Supermarket / Pharmacy Toggle - RESTORED */}
+            {/* Supermarket / Pharmacy Toggle */}
             <div className="flex gap-1 bg-gradient-to-r from-gray-100 to-gray-200 p-1.5 rounded-full shadow-inner">
               <button
                 className={`lg:px-8 lg:py-3 px-6 py-2.5 rounded-full font-bold transition-all duration-300 active:scale-95 ${
@@ -836,7 +835,7 @@ const OrderCompleteModal = ({ setOrderComplete }: { setOrderComplete: (value: bo
               </button>
             </div>
 
-            {/* User Info + Store Credit */}
+            {/* Cart Button */}
             <button
               onClick={() => setIsCartOpen(true)}
               className="relative p-4 bg-gradient-to-r from-red-500 to-orange-500 text-white rounded-xl hover:from-red-600 hover:to-orange-600 active:scale-95 transition-all duration-300 shadow-lg hover:shadow-xl"
@@ -848,26 +847,25 @@ const OrderCompleteModal = ({ setOrderComplete }: { setOrderComplete: (value: bo
                 </span>
               )}
             </button>
-           
+
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <section className="relative overflow-hidden py-16 lg:py-5">
-          {/* Background Glow */}
           <div className="absolute -top-32 -left-32 w-96 h-96 bg-red-400/20 blur-[120px] rounded-full" />
           <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-orange-400/20 blur-[120px] rounded-full" />
 
           <div className="relative max-w-7xl mx-auto px-6 lg:px-8">
             <div className="grid lg:grid-cols-2 gap-12 items-center">
-              
+
               {/* LEFT SIDE - Text Content */}
               <div>
                 <h1 className="text-4xl lg:text-6xl font-extrabold text-gray-900 leading-tight">
-                  Fresh 
+                  Fresh
                   <span className="bg-gradient-to-r from-red-500 via-orange-500 to-yellow-500 bg-clip-text text-transparent animate-gradient">
-                     Groceries
+                    {" "}Groceries
                   </span>{" "}
                   Delivered Fast
                 </h1>
@@ -973,10 +971,10 @@ const OrderCompleteModal = ({ setOrderComplete }: { setOrderComplete: (value: bo
           ) : filteredProducts.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 lg:gap-6">
               {filteredProducts.map((product) => {
-                const hasBundle = product.name.toLowerCase().includes("egg") || 
-                                  product.name.toLowerCase().includes("noodle") || 
-                                  (product.name.toLowerCase().includes("tomato") && 
-                                   (product.name.toLowerCase().includes("sachet") || product.name.toLowerCase().includes("satchet")));
+                const hasBundle = product.name.toLowerCase().includes("egg") ||
+                  product.name.toLowerCase().includes("noodle") ||
+                  (product.name.toLowerCase().includes("tomato") &&
+                    (product.name.toLowerCase().includes("sachet") || product.name.toLowerCase().includes("satchet")));
 
                 const congoKg = getCongoKg(product.name);
 
@@ -991,9 +989,19 @@ const OrderCompleteModal = ({ setOrderComplete }: { setOrderComplete: (value: bo
 
                       <div className="flex items-center justify-between mt-auto">
                         <div>
-                          <p className="text-lg font-bold text-red-500">₦{product.price.toLocaleString()}</p>
-                          {congoKg !== null && (
-                            <p className="text-xs text-orange-600 font-medium">₦{congoPriceFromKgPrice(product.price, congoKg).toLocaleString()}/congo</p>
+                          {congoKg !== null ? (
+                            <>
+                              {/* Congo price is the primary/bold price */}
+                              <p className="text-lg font-bold text-red-500">
+                                ₦{congoPriceFromKgPrice(product.price, congoKg).toLocaleString()}<span className="text-xs font-medium text-gray-400">/congo</span>
+                              </p>
+                              {/* Kg price shown as secondary */}
+                              <p className="text-xs text-gray-400 font-medium">
+                                ₦{product.price.toLocaleString()}/kg
+                              </p>
+                            </>
+                          ) : (
+                            <p className="text-lg font-bold text-red-500">₦{product.price.toLocaleString()}</p>
                           )}
                         </div>
                         <div className="flex items-center gap-2">
@@ -1011,8 +1019,6 @@ const OrderCompleteModal = ({ setOrderComplete }: { setOrderComplete: (value: bo
                           )}
                         </div>
                       )}
-
-                      {congoKg !== null && product.stock > 0 && <p className="text-xs text-orange-500 font-medium mt-1">📏 Available by congo</p>}
                     </div>
 
                     <button
