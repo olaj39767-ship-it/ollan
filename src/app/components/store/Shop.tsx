@@ -89,6 +89,16 @@ const getCongoKg = (productName: string): number | null => {
 const congoPriceFromKgPrice = (pricePerKg: number, kgPerCongo: number): number =>
   pricePerKg * kgPerCongo;
 
+// Replace congoPriceFromKgPrice usage with this helper
+const getCongoPrice = (product: Product): number | null => {
+  // Use backend priceInCongo if set
+  if (product.priceInCongo != null) return product.priceInCongo;
+  // Fall back to arithmetic if product is a known congo item
+  const congoKg = getCongoKg(product.name);
+  if (congoKg !== null) return congoPriceFromKgPrice(product.price, congoKg);
+  return null;
+};
+
 const SIGNED_IN_DISCOUNT = 0;
 
 const applyUserDiscount = (price: number, isSignedIn: boolean): number => {
@@ -231,17 +241,14 @@ const PharmacyApp: React.FC = () => {
   }, []);
 
   // Open quantity modal — default to "congo" if product supports it
-  const openQuantityModal = (product: Product) => {
-    if (!isOpen) {
-      alert(`Sorry, we're currently closed. ${businessStatusMessage}`);
-      return;
-    }
-    setSelectedProduct(product);
-    setQuantity(1);
-    const congoKg = getCongoKg(product.name);
-    setSelectedUnit(congoKg !== null ? "congo" : "kg");
-    setIsQuantityModalOpen(true);
-  };
+const openQuantityModal = (product: Product) => {
+  if (!isOpen) { alert(`Sorry, we're currently closed. ${businessStatusMessage}`); return; }
+  setSelectedProduct(product);
+  setQuantity(1);
+  const congoPrice = getCongoPrice(product);  // changed
+  setSelectedUnit(congoPrice !== null ? "congo" : "kg");
+  setIsQuantityModalOpen(true);
+};
 
   useEffect(() => {
     setCustomerInfo((prev) => ({
@@ -326,6 +333,8 @@ const PharmacyApp: React.FC = () => {
     return result;
   }, [products, viewMode, selectedCategory]);
 
+  console.log("Filtered products:", filteredProducts);
+
   const searchedProducts = useMemo(() => {
     return searchQuery
       ? filteredProducts.filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -352,44 +361,43 @@ const PharmacyApp: React.FC = () => {
 
   const deliveryFee = 0;
 
-  const handleAddToCart = async () => {
-    if (!isOpen) {
-      alert(`Sorry, we're currently closed. ${businessStatusMessage}`);
-      setIsQuantityModalOpen(false);
-      setSelectedProduct(null);
-      setQuantity(1);
-      setSelectedUnit("kg");
-      return;
-    }
+const handleAddToCart = async () => {
+  if (!isOpen) { /* ... */ return; }
+  if (!selectedProduct || quantity <= 0 || isAddingToCart) return;
+  setIsAddingToCart(true);
 
-    if (!selectedProduct || quantity <= 0 || isAddingToCart) return;
-    setIsAddingToCart(true);
+  try {
+    const congoPrice = getCongoPrice(selectedProduct);  // uses priceInCongo first, falls back to arithmetic
+    const effectiveUnitPrice =
+      selectedUnit === "congo" && congoPrice !== null
+        ? congoPrice
+        : selectedProduct.price;
 
-    try {
-      const congoKg = getCongoKg(selectedProduct.name);
-      const effectiveUnitPrice =
-        selectedUnit === "congo" && congoKg !== null
-          ? congoPriceFromKgPrice(selectedProduct.price, congoKg)
-          : selectedProduct.price;
+    const bundleInfo = getProductBundleInfo(selectedProduct.name, quantity, effectiveUnitPrice);
+    const discountedFinal = applyUserDiscount(bundleInfo.finalPrice, isLoggedIn);
+    console.log("Adding to cart:", {
+  name: selectedProduct.name,
+  selectedUnit,
+  effectiveUnitPrice,
+  priceInCongo: selectedProduct.priceInCongo,
+  priceKg: selectedProduct.price,
+});
 
-      const bundleInfo = getProductBundleInfo(selectedProduct.name, quantity, effectiveUnitPrice);
-      const discountedFinal = applyUserDiscount(bundleInfo.finalPrice, isLoggedIn);
-
-      cartDispatch({
-        type: "ADD_ITEM",
-        payload: {
-          productId: selectedProduct._id,
-          name: selectedProduct.name,
-          price: effectiveUnitPrice,
-          image: selectedProduct.image,
-          quantity,
-          unit: selectedUnit,
-          bundleApplied: bundleInfo.hasBundle,
-          originalPrice: bundleInfo.originalPrice,
-          finalPrice: discountedFinal,
-          discount: bundleInfo.savedAmount,
-        },
-      });
+    cartDispatch({
+      type: "ADD_ITEM",
+      payload: {
+        productId: selectedProduct._id,
+        name: selectedProduct.name,
+        price: effectiveUnitPrice,       // ✅ correct unit price stored
+        image: selectedProduct.image,
+        quantity,
+        unit: selectedUnit,              // ✅ "congo" or "kg" stored
+        bundleApplied: bundleInfo.hasBundle,
+        originalPrice: bundleInfo.originalPrice,
+        finalPrice: discountedFinal,
+        discount: bundleInfo.savedAmount,
+      },
+    });
 
       setIsQuantityModalOpen(false);
       setSelectedProduct(null);
@@ -440,10 +448,11 @@ const PharmacyApp: React.FC = () => {
           transactionNumber: info.transactionNumber.trim(),
           estimatedDelivery: estimatedDeliveryTime,
         },
-        items: cart.map((item) => ({
-          productId: item.productId,
-          quantity: item.quantity,
-        })),
+      items: cart.map((item) => ({
+  productId: item.productId,
+  quantity: item.quantity,
+  unit: item.unit ?? "kg",  // ✅ this reaches createOrder backend
+})),
         prescriptionUrl: "",
         referralCode: info.referralCode || undefined,
         storeCreditApplied: useStoreCredit,
@@ -474,6 +483,8 @@ const PharmacyApp: React.FC = () => {
       } else {
         alert("✅ Order submitted! We will verify your payment.");
       }
+
+      
 
       setOrderComplete(true);
       cartDispatch({ type: "CLEAR_CART" });
@@ -514,11 +525,11 @@ const PharmacyApp: React.FC = () => {
 
     if (!isQuantityModalOpen || !selectedProduct) return null;
 
-    const congoKg = getCongoKg(selectedProduct.name);
-    const supportsCongo = congoKg !== null;
-    const effectiveUnitPrice = selectedUnit === "congo" && congoKg !== null
-      ? congoPriceFromKgPrice(selectedProduct.price, congoKg)
-      : selectedProduct.price;
+ const congoPrice = getCongoPrice(selectedProduct);
+const supportsCongo = congoPrice !== null;
+const effectiveUnitPrice = selectedUnit === "congo" && congoPrice !== null
+  ? congoPrice
+  : selectedProduct.price;
 
     const bundleInfo = getProductBundleInfo(selectedProduct.name, quantity, effectiveUnitPrice);
     const discountedFinal = applyUserDiscount(bundleInfo.finalPrice, isLoggedIn);
@@ -989,20 +1000,22 @@ const PharmacyApp: React.FC = () => {
 
                       <div className="flex items-center justify-between mt-auto">
                         <div>
-                          {congoKg !== null ? (
-                            <>
-                              {/* Congo price is the primary/bold price */}
-                              <p className="text-lg font-bold text-red-500">
-                                ₦{congoPriceFromKgPrice(product.price, congoKg).toLocaleString()}<span className="text-xs font-medium text-gray-400">/congo</span>
-                              </p>
-                              {/* Kg price shown as secondary */}
-                              <p className="text-xs text-gray-400 font-medium">
-                                ₦{product.price.toLocaleString()}/kg
-                              </p>
-                            </>
-                          ) : (
-                            <p className="text-lg font-bold text-red-500">₦{product.price.toLocaleString()}</p>
-                          )}
+                          {(() => {
+  const congoPrice = getCongoPrice(product);
+  return congoPrice !== null ? (
+    <>
+      <p className="text-lg font-bold text-red-500">
+        ₦{congoPrice.toLocaleString()}
+        <span className="text-xs font-medium text-gray-400">/congo</span>
+      </p>
+      <p className="text-xs text-gray-400 font-medium">
+        ₦{product.price.toLocaleString()}/kg
+      </p>
+    </>
+  ) : (
+    <p className="text-lg font-bold text-red-500">₦{product.price.toLocaleString()}</p>
+  );
+})()}
                         </div>
                         <div className="flex items-center gap-2">
                           {product.stock > 0 ? <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div> : <div className="h-2 w-2 rounded-full bg-red-500"></div>}

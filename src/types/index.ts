@@ -8,6 +8,7 @@ export interface Product {
   category?: string;
   createdAt: string;
   bundleOffers?: BundleOffer[]; // Add bundle offers to product
+  priceInCongo?: number | null;
 
 }
 

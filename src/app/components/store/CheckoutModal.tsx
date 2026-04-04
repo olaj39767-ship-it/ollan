@@ -87,7 +87,7 @@ interface CheckoutModalProps {
   isProcessing: boolean;
   isSubmittingOrder?: boolean;
   submitOrder: (info: CustomerInfo) => Promise<void> | void;
-  cart: { productId: string; quantity: number }[];
+cart: { productId: string; quantity: number; unit?: "kg" | "congo" }[];
   availableStoreCredit: number;
   useStoreCredit: boolean;
   setUseStoreCredit: React.Dispatch<React.SetStateAction<boolean>>;
@@ -347,7 +347,10 @@ const handleFlutterwavePayment = useCallback(async () => {
           timeSlot: customerInfo.timeSlot || 'nil',
           referralCode: referralCode.trim() || undefined,
         },
-        items: cart,  // [{ productId, quantity }]
+items: cart.map((item) => ({
+  ...item,
+  unit: item.unit ?? "kg",  // already on cart items, but make explicit
+})),
         storeCreditApplied: canUseStoreCredit && useStoreCredit,
       }),
     });

@@ -39,6 +39,7 @@ interface Product {
   name: string;
   description?: string;
   price: number;
+  priceInCongo?: number | null;  // ADD THIS
   stock: number;
   category?: string;
   image?: string | null;
@@ -470,6 +471,15 @@ const handleImageChange = (productId: string, file: File) => {
                       </TableSortLabel>
                     </TableCell>
                     <TableCell>
+  <TableSortLabel
+    active={orderBy === "priceInCongo"}
+    direction={orderBy === "priceInCongo" ? order : "asc"}
+    onClick={handleSort("priceInCongo")}
+  >
+    Price (Congo)
+  </TableSortLabel>
+</TableCell>
+                    <TableCell>
                       <TableSortLabel
                         active={orderBy === "stock"}
                         direction={orderBy === "stock" ? order : "asc"}
@@ -536,6 +546,29 @@ const handleImageChange = (productId: string, file: File) => {
                               `₦${product.price.toFixed(2)}`
                             )}
                       </TableCell>
+                      <TableCell>
+  {editingProduct === product._id ? (
+    <TextField
+      type="number"
+      value={editedProducts[product._id]?.priceInCongo ?? product.priceInCongo ?? ""}
+      onChange={(e) =>
+        handleInputChange(
+          product._id,
+          "priceInCongo",
+          e.target.value === "" ? null : parseFloat(e.target.value)
+        )
+      }
+      size="small"
+      fullWidth
+      placeholder="Optional"
+      inputProps={{ "aria-label": "Product price in Congo" }}
+    />
+  ) : product.priceInCongo != null ? (
+    `FC ${product.priceInCongo.toFixed(2)}`
+  ) : (
+    "-"
+  )}
+</TableCell>
                       <TableCell>
                         {product.stock == null
                           ? "-"
