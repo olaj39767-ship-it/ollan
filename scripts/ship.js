@@ -30,7 +30,7 @@ rl.question('Commit message: ', (message) => {
 
   try {
     execSync(
-      `git remote set-url origin https://${token}@github.com/${repo}.git`,
+      `git remote set-url origin https://${token}@github.com/${repo}`,
       { stdio: 'inherit' }
     );
 
